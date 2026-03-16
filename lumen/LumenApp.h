@@ -71,7 +71,8 @@ private:
 
     
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mPosOnlyInputLayout;
-	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
+    std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
+    std::vector<D3D12_INPUT_ELEMENT_DESC> mQuadInputLayout;
 
     GlobalConstants mGlobalConstants;
     std::unique_ptr<UploadBuffer<GlobalConstants>> mObjectCB = nullptr;

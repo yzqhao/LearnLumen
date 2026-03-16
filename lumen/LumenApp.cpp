@@ -268,6 +268,12 @@ void LumenApp::Draw(const GameTimer& gt)
         D3D12_CPU_DESCRIPTOR_HANDLE colorRT[4] = { mCPUViews["SceneColorRTV"], mCPUViews["GBufferARTV"], mCPUViews["GBufferBRTV"], mCPUViews["GBufferCRTV"] };
         D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mDsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
         mCommandList->OMSetRenderTargets(4, colorRT, FALSE, &dsRT);
+        float clearColor[] = { 0.0f,0.0f,0.0f,1.0f };
+        mCommandList->ClearRenderTargetView(colorRT[0], clearColor, 0, nullptr);
+        clearColor[3] = 0.0f;
+        mCommandList->ClearRenderTargetView(colorRT[1], clearColor, 0, nullptr);
+        mCommandList->ClearRenderTargetView(colorRT[2], clearColor, 0, nullptr);
+        mCommandList->ClearRenderTargetView(colorRT[3], clearColor, 0, nullptr);
         //mCommandList->ClearDepthStencilView(dsRT, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
 
         mCommandList->SetGraphicsRootSignature(mRootSignatures["BasePass"]);
@@ -306,6 +312,56 @@ void LumenApp::Draw(const GameTimer& gt)
         mCommandList->Dispatch(120, 68, 1);
 
         barriers[0] = InitResourceBarrier(mShadowMaskTexture->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+    {   //DirectionalLighting
+        D3D12_RESOURCE_BARRIER barriers[1];
+        barriers[0] = InitResourceBarrier(mSceneColor->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT = mCPUViews["SceneColorRTV"];
+        mCommandList->OMSetRenderTargets(1, &colorRT, FALSE, nullptr);
+
+        mCommandList->SetPipelineState(mPSOs["DirectionalLighting"]);
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["DirectionalLighting"]);
+
+        mCommandList->IASetVertexBuffers(0, 1, &mScreenFullGeo->VertexBufferView());
+        mCommandList->IASetIndexBuffer(&mScreenFullGeo->IndexBufferView());
+        mCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+        mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+        mCommandList->SetGraphicsRootDescriptorTable(1, mGPUViews["GBufferASRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["GBufferBSRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["GBufferCSRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(4, mGPUViews["SceneDepthZSRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(5, mGPUViews["ShadowMaskTextureSRV"]);
+
+        mCommandList->DrawIndexedInstanced(mScreenFullGeo->IndexCount, 1, 0, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mSceneColor->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+    {   //ToneMap
+        D3D12_RESOURCE_BARRIER barriers[1];
+        barriers[0] = InitResourceBarrier(mToneMap->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT = mCPUViews["ToneMapRTV"];
+        mCommandList->OMSetRenderTargets(1, &colorRT, FALSE, nullptr);
+
+        mCommandList->SetPipelineState(mPSOs["ToneMap"]);
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["ToneMap"]);
+
+        mCommandList->IASetVertexBuffers(0, 1, &mScreenFullGeo->VertexBufferView());
+        mCommandList->IASetIndexBuffer(&mScreenFullGeo->IndexBufferView());
+        mCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        mCommandList->SetGraphicsRootDescriptorTable(0, mGPUViews["SceneColorSRV"]);
+
+        mCommandList->DrawIndexedInstanced(mScreenFullGeo->IndexCount, 1, 0, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mToneMap->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
 
@@ -412,6 +468,11 @@ void LumenApp::BuildShadersAndInputLayout()
         {"TANGENTX",0,DXGI_FORMAT_R8G8B8A8_SNORM,1,0,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0},
         {"TANGENTZ",0,DXGI_FORMAT_R8G8B8A8_SNORM,1,4,D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0}
 	};
+    mQuadInputLayout =
+    {
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+    };
 }
 
 void LumenApp::BuildPSO()
@@ -491,6 +552,68 @@ void LumenApp::BuildPSO()
         };
         computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
         ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["ShadowMask"])));
+    }
+    {   //DirectionalLighting
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mQuadInputLayout.data(), (uint)mQuadInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["DirectionalLighting"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["DirectionalLightingVS"]->GetBufferPointer()),
+            mDxcByteCodes["DirectionalLightingVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["DirectionalLightingPS"]->GetBufferPointer()),
+            mDxcByteCodes["DirectionalLightingPS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = mSceneColor->mRTVFormat;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["DirectionalLighting"])));
+    }
+    {   //ToneMap
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mQuadInputLayout.data(), (uint)mQuadInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["ToneMap"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["ToneMappingVS"]->GetBufferPointer()),
+            mDxcByteCodes["ToneMappingVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["ToneMappingPS"]->GetBufferPointer()),
+            mDxcByteCodes["ToneMappingPS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = mToneMap->mRTVFormat;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["ToneMap"])));
     }
 }
 
@@ -616,12 +739,14 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferA->mResource, mGBufferA->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferB->mResource, mGBufferB->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferC->mResource, mGBufferC->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mToneMap->mResource, mToneMap->mRTVFormat);
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
     mCPUViews["SceneColorRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
     mCPUViews["GBufferARTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
     mCPUViews["GBufferBRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
     mCPUViews["GBufferCRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
+    mCPUViews["ToneMapRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
 
     // DSV
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
@@ -759,6 +884,76 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferPointer(),
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["ShadowMask"])));
+    }
+    {   //DirectionalLighting
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+
+        CD3DX12_DESCRIPTOR_RANGE srvTable0, srvTable1, srvTable2, srvTable3, srvTable4;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        srvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+        srvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        srvTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        srvTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[6];
+        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+        slotRootParameter[1].InitAsDescriptorTable(1, &srvTable0);
+        slotRootParameter[2].InitAsDescriptorTable(1, &srvTable1);
+        slotRootParameter[3].InitAsDescriptorTable(1, &srvTable2);
+        slotRootParameter[4].InitAsDescriptorTable(1, &srvTable3);
+        slotRootParameter[5].InitAsDescriptorTable(1, &srvTable4);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(6, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["DirectionalLighting"])));
+    }
+    {   //ToneMap
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[1];
+        slotRootParameter[0].InitAsDescriptorTable(1, &srvTable0);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["ToneMap"])));
     }
 }
 

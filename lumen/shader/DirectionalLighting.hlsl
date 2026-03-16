@@ -17,7 +17,12 @@ Texture2D GBufferB : register(t1);
 Texture2D GBufferC : register(t2);
 Texture2D SceneDepth : register(t3);
 Texture2D ShadowMaskTexture : register(t4);
-SamplerState MinMagMipPoint : register(s0);
+
+SamplerState gsamPointWrap : register(s0);
+SamplerState gsamPointClamp : register(s1);
+SamplerState gsamLinearWrap : register(s2);
+SamplerState gsamLinearClamp : register(s3);
+SamplerState gsamAnisotropicWrap : register(s4);
 
 const static float PI = 3.1415926535897932f;
 const static float View_MinRoughness = 0.02f;
@@ -290,7 +295,7 @@ float ConvertFromDeviceZ(float DeviceZ)
 }
 float CalcSceneDepth(float2 ScreenUV)
 {
-    return ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepth, MinMagMipPoint, ScreenUV, 0).r);
+    return ConvertFromDeviceZ(Texture2DSampleLevel(SceneDepth, gsamPointClamp, ScreenUV, 0).r);
 }
 float DielectricSpecularToF0(float Specular)
 {
@@ -391,9 +396,9 @@ FGBufferData DecodeGBufferDataUV(float2 UV, bool bGetNormalizedNormal = true)
     uint CustomStencil = 0;
     float SceneDepth = CalcSceneDepth(UV);
     float4 AnisotropicData = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float4 InMRT1 = Texture2DSampleLevel(GBufferA, MinMagMipPoint, UV, 0).xyzw;
-    float4 InMRT2 = Texture2DSampleLevel(GBufferB, MinMagMipPoint, UV, 0).xyzw;
-    float4 InMRT3 = Texture2DSampleLevel(GBufferC, MinMagMipPoint, UV, 0).xyzw;
+    float4 InMRT1 = Texture2DSampleLevel(GBufferA, gsamPointClamp, UV, 0).xyzw;
+    float4 InMRT2 = Texture2DSampleLevel(GBufferB, gsamPointClamp, UV, 0).xyzw;
+    float4 InMRT3 = Texture2DSampleLevel(GBufferC, gsamPointClamp, UV, 0).xyzw;
     float4 InMRT4 = float4(0.0f, 0.0f, 0.0f, 0.0f);
     FGBufferData Ret = DecodeGBufferDataDirect(InMRT1,
 		InMRT2,
@@ -475,7 +480,7 @@ void PS(
     float3 V = normalize(inCameraVector);
     //distance field shadow
     float4 outColor = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float4 lightAttenuation = ShadowMaskTexture.SampleLevel(MinMagMipPoint, inTexcoord, 0.0f); //float4(1.0f,1.0f,1.0f,1.0f);
+    float4 lightAttenuation = ShadowMaskTexture.SampleLevel(gsamPointClamp, inTexcoord, 0.0f); //float4(1.0f,1.0f,1.0f,1.0f);
     SurfaceInfo SurfaceInfo = GetSurfaceInfo(inTexcoord); //g buffer -> surface pixel point
     [branch]
     if (SurfaceInfo.ShadingModelID > 0)

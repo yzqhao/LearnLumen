@@ -14,7 +14,12 @@ cbuffer GlobalConstants
 }
 
 Texture2D SceneColorTexture : register(t0);
-SamplerState MinMagLinearMipPoint : register(s0);
+
+SamplerState gsamPointWrap : register(s0);
+SamplerState gsamPointClamp : register(s1);
+SamplerState gsamLinearWrap : register(s2);
+SamplerState gsamLinearClamp : register(s3);
+SamplerState gsamAnisotropicWrap : register(s4);
 
 //lumen -> time/fps
 void VS(in float2 inPositionNDC : POSITION, in float2 inTexcoord : TEXCOORD,
@@ -32,7 +37,7 @@ void PS(
 {
     //distance field shadow
     float exposure = 2.4f;
-    float4 sceneColor = SceneColorTexture.SampleLevel(MinMagLinearMipPoint, inTexcoord, 0.0f);
+    float4 sceneColor = SceneColorTexture.SampleLevel(gsamPointClamp, inTexcoord, 0.0f);
     sceneColor /= exposure;
     //+bloom
     //color grading
