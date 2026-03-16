@@ -14,12 +14,16 @@ cbuffer GlobalConstants
 }
 const static float4 View_InvDeviceZToWorldZTransform = float4(0.0f, 0.0f, 0.1f, -1.00000E-08f);
 //instance => sdf 
-StructuredBuffer<float4> DFSceneObject : register(t0);
-Texture2D SceneDepthTexture : register(t1);
+Texture2D SceneDepthTexture : register(t0);
+StructuredBuffer<float4> DFSceneObject : register(t1);
 
 RWTexture2D<float4> ShadowMaskTexture : register(u0);
-SamplerState MinMagMipPoint : register(s0);
-SamplerState MinMagLinearMipPointSampler : register(s1);
+
+SamplerState gsamPointWrap : register(s0);
+SamplerState gsamPointClamp : register(s1);
+SamplerState gsamLinearWrap : register(s2);
+SamplerState gsamLinearClamp : register(s3);
+SamplerState gsamAnisotropicWrap : register(s4);
 
 //aabb ray
 float2 LineBoxIntersect(float3 RayOrigin, float3 RayEnd, float3 BoxMin, float3 BoxMax)
@@ -200,7 +204,7 @@ void CS(uint3 inGroupId : SV_GroupID, //(0~119,0~67,0)
         //ndc y
         float2 ndc_coord = (uv - 0.5) * float2(2.0f, -2.0f); //(-1,1)
         //(0,0)=>(0,0),(1,0),(0,1),(1,1)=>(0.5,0.5),(1.5,0.5),(0.5,1.5),(1.5,1.5)
-        float deviceZ = SceneDepthTexture.GatherRed(MinMagLinearMipPointSampler, float2(inDispatchThreadId.xy + uint2(1, 1)) / canvasSize).r; //0~1
+        float deviceZ = SceneDepthTexture.GatherRed(gsamLinearClamp, float2(inDispatchThreadId.xy + uint2(1, 1)) / canvasSize).r; //0~1
         //pcf
         float sceneDepth = 1.0f / (deviceZ * View_InvDeviceZToWorldZTransform[2] - View_InvDeviceZToWorldZTransform[3]);
         //perspective divide=>xy/w w=>z

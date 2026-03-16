@@ -289,6 +289,25 @@ void LumenApp::Draw(const GameTimer& gt)
         barriers[4] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
+    {   //ShadowMask
+        D3D12_RESOURCE_BARRIER barriers[1];
+        barriers[0] = InitResourceBarrier(mShadowMaskTexture->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        mCommandList->SetPipelineState(mPSOs["ShadowMask"]);
+        mCommandList->SetComputeRootSignature(mRootSignatures["ShadowMask"]);
+
+        CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+        mCommandList->SetComputeRootDescriptorTable(0, hCbvGpuDescriptor);
+        mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["SceneDepthZSRV"]);
+        mCommandList->SetComputeRootShaderResourceView(2, mDFSceneObject->mResource->GetGPUVirtualAddress());
+        mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["ShadowMaskTextureUAV"]);
+
+        mCommandList->Dispatch(120, 68, 1);
+
+        barriers[0] = InitResourceBarrier(mShadowMaskTexture->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -462,6 +481,17 @@ void LumenApp::BuildPSO()
         psoDesc.DepthStencilState.StencilEnable = FALSE;
         ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["BasePass"])));
     }
+    {   //ShadowMask
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["ShadowMask"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["ShadowMaskCS"]->GetBufferPointer()),
+            mDxcByteCodes["ShadowMaskCS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["ShadowMask"])));
+    }
 }
 
 static void CreateTexture2DDSV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, D3DImage* inDSRT, D3D12_DSV_FLAGS inFlags=D3D12_DSV_FLAG_NONE)
@@ -560,11 +590,25 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferA->mResource, mGBufferA->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferB->mResource, mGBufferB->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferC->mResource, mGBufferC->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mSceneDepthZ->mResource, mSceneDepthZ->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mShadowMaskTexture->mResource, mShadowMaskTexture->mFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mShadowMaskTexture->mResource, mShadowMaskTexture->mSRVFormat, 0);
     viewCount = 0;
-    mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
-    mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
-    mCPUViews["GBufferBSRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
-    mCPUViews["GBufferCSRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
+    mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["GBufferBSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["GBufferCSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["SceneDepthZSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["ShadowMaskTextureUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["ShadowMaskTextureSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    viewCount = 0;
+    mGPUViews["SceneColorSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["GBufferASRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["GBufferBSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["GBufferCSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["SceneDepthZSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["ShadowMaskTextureUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["ShadowMaskTextureSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
 
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
@@ -677,13 +721,51 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["BasePass"])));
     }
+    {   //ShadowMask
+        CD3DX12_DESCRIPTOR_RANGE uavTable0;
+        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+        slotRootParameter[1].InitAsDescriptorTable(1, &srvTable0);
+        //slotRootParameter[1].InitAsShaderResourceView(0);
+        slotRootParameter[2].InitAsShaderResourceView(1);
+        slotRootParameter[3].InitAsDescriptorTable(1, &uavTable0);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["ShadowMask"])));
+    }
 }
 
 D3DResource* LumenApp::InitBufferFromFile(const wchar_t* resname, const char* file)
 {
     size_t fileSize = 0;
     unsigned char* fileContent = d3dUtil::LoadFileContent(file, fileSize);
-    D3DResource* resource = new D3DResource(D3D12_RESOURCE_STATE_COMMON);
     ID3D12Resource* uploadBuffer = nullptr;
     D3DResource* res = new D3DResource(D3D12_RESOURCE_STATE_COMMON);
     res->mResource = d3dUtil::CreateDefaultBuffer(
