@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="platform">
+      <UniqueIdentifier>{fe59155e-14ee-4b7c-8b46-797988f6f520}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lumen">
+      <UniqueIdentifier>{353237b8-ef9d-47ad-b8aa-fcbca9558024}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lumen\LumenApp.cpp">
+      <Filter>lumen</Filter>
+    </ClCompile>
+    <ClCompile Include="lumen\GlobalConstants.cpp">
+      <Filter>lumen</Filter>
+    </ClCompile>
+    <ClCompile Include="lumen\D3DImage.cpp">
+      <Filter>lumen</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="platform\PlatformConfig.h">
+      <Filter>platform</Filter>
+    </ClInclude>
+    <ClInclude Include="lumen\LumenApp.h">
+      <Filter>lumen</Filter>
+    </ClInclude>
+    <ClInclude Include="lumen\GlobalConstants.h">
+      <Filter>lumen</Filter>
+    </ClInclude>
+    <ClInclude Include="lumen\D3DImage.h">
+      <Filter>lumen</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="lumen\color.hlsl">
+      <Filter>lumen</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\PreZ.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\ShadowMask.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\ToneMapping.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\BasePass.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\DirectionalLighting.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+  </ItemGroup>
+</Project>

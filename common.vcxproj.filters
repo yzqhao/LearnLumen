@@ -1,0 +1,225 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="math">
+      <UniqueIdentifier>{21f98577-325b-46d3-91d8-4f5934f620f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="common\d3dApp.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\d3dUtil.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\DDSTextureLoader.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\GameTimer.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\GeometryGenerator.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="common\Camera.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Color.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\CubicBezier.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Frustum.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\IntRect.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\IntVec2.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\IntVec3.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\IntVec4.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Mat3.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Mat4.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Math.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\MathUtil.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Plane.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Quaternion.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Random.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Ray.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Rect.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Sphere.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Transform.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Vec1.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Vec2.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Vec3.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\Vec4.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="math\AABB.cpp">
+      <Filter>math</Filter>
+    </ClCompile>
+    <ClCompile Include="common\d3dDxcCompile.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="UploadBuffer.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\d3dApp.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\d3dUtil.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\d3dx12.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\DDSTextureLoader.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\GameTimer.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\GeometryGenerator.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\Camera.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="math\AABB.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Color.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\CubicBezier.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Frustum.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\IntRect.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\IntVec2.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\IntVec3.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\IntVec4.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Mat3.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Mat4.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Math.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\MathDefs.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\MathUtil.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Matrix4fArray.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Plane.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Quaternion.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Random.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Ray.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Rect.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Sphere.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Transform.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Vec1.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Vec2.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Vec3.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\Vec4.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\VectorArray.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="math\3DMath.h">
+      <Filter>math</Filter>
+    </ClInclude>
+    <ClInclude Include="common\d3dDxcCompile.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\Macros.h">
+      <Filter>common</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="math\CMakeLists.txt">
+      <Filter>math</Filter>
+    </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="math\MathUtil.inl">
+      <Filter>math</Filter>
+    </None>
+  </ItemGroup>
+</Project>
