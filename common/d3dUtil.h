@@ -78,6 +78,7 @@ struct MeshGeometry
     ID3DBlob* IndexBufferCPU = nullptr;
 
     ID3D12Resource* VertexBufferGPU = nullptr;
+    ID3D12Resource* VertexBufferGPU2 = nullptr;
     ID3D12Resource* IndexBufferGPU = nullptr;
 
     ID3D12Resource* VertexBufferUploader = nullptr;
@@ -97,6 +98,16 @@ struct MeshGeometry
         vbv.BufferLocation = VertexBufferGPU->GetGPUVirtualAddress();
         vbv.StrideInBytes = VertexByteStride;
         vbv.SizeInBytes = VertexBufferByteSize;
+
+        return vbv;
+    }
+
+    D3D12_VERTEX_BUFFER_VIEW VertexBufferView2()const
+    {
+        D3D12_VERTEX_BUFFER_VIEW vbv;
+        vbv.BufferLocation = VertexBufferGPU2->GetGPUVirtualAddress();
+        vbv.StrideInBytes = sizeof(unsigned char) * 8;  // hack
+        vbv.SizeInBytes = sizeof(unsigned char) * 8 * 54;
 
         return vbv;
     }

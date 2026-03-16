@@ -233,7 +233,7 @@ void LumenApp::Draw(const GameTimer& gt)
 	// Specify the buffers we are going to render to.
 	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
 
-    {   //  
+    {   // PreZ
         D3D12_RESOURCE_BARRIER barriers[1];
         barriers[0] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
@@ -254,6 +254,39 @@ void LumenApp::Draw(const GameTimer& gt)
         mCommandList->DrawIndexedInstanced(mCubeGeo->IndexCount, 2, 0, 0, 0);
 
         barriers[0] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+    {   // BasePass
+        D3D12_RESOURCE_BARRIER barriers[5];
+        barriers[0] = InitResourceBarrier(mSceneColor->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        barriers[1] = InitResourceBarrier(mGBufferA->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        barriers[2] = InitResourceBarrier(mGBufferB->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        barriers[3] = InitResourceBarrier(mGBufferC->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        barriers[4] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[4] = { mCPUViews["SceneColorRTV"], mCPUViews["GBufferARTV"], mCPUViews["GBufferBRTV"], mCPUViews["GBufferCRTV"] };
+        D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mDsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        mCommandList->OMSetRenderTargets(4, colorRT, FALSE, &dsRT);
+        //mCommandList->ClearDepthStencilView(dsRT, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
+
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["BasePass"]);
+        mCommandList->SetPipelineState(mPSOs["BasePass"]);
+
+        CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+        mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+
+        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        D3D12_VERTEX_BUFFER_VIEW VBOView[2] = { mCubeGeo->VertexBufferView(),mCubeGeo->VertexBufferView2() };
+        mCommandList->IASetVertexBuffers(0, 2, VBOView);
+        mCommandList->IASetIndexBuffer(&mCubeGeo->IndexBufferView());
+        mCommandList->DrawIndexedInstanced(mCubeGeo->IndexCount, 2, 0, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mSceneColor->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[1] = InitResourceBarrier(mGBufferA->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[2] = InitResourceBarrier(mGBufferB->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[3] = InitResourceBarrier(mGBufferC->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[4] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
 
@@ -291,6 +324,7 @@ void LumenApp::BuildScreenFullGeometry()
         const UINT ibByteSize = (UINT)3 * sizeof(std::uint16_t);
 
         mCubeGeo->VertexBufferGPU = mCubePositionBuffer->mResource;
+        mCubeGeo->VertexBufferGPU2 = mCubeAttributeBuffer->mResource;
         mCubeGeo->IndexBufferGPU = mCubeIndexBuffer->mResource;
 
         mCubeGeo->VertexByteStride = sizeof(float) * 3;
@@ -410,7 +444,11 @@ void LumenApp::BuildPSO()
         psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
         psoDesc.SampleMask = UINT_MAX;
         psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        psoDesc.NumRenderTargets = 0;
+        psoDesc.NumRenderTargets = 4;
+        psoDesc.RTVFormats[0] = mSceneColor->mRTVFormat;
+        psoDesc.RTVFormats[1] = mGBufferA->mRTVFormat;
+        psoDesc.RTVFormats[2] = mGBufferB->mRTVFormat;
+        psoDesc.RTVFormats[3] = mGBufferC->mRTVFormat;
         psoDesc.DSVFormat = mSceneDepthZ->mRTVFormat;
         psoDesc.SampleDesc.Count = 1;
         psoDesc.SampleDesc.Quality = 0;
@@ -419,10 +457,10 @@ void LumenApp::BuildPSO()
         psoDesc.RasterizerState.DepthClipEnable = true;
         psoDesc.RasterizerState.FrontCounterClockwise = true;
         psoDesc.DepthStencilState.DepthEnable = TRUE;
-        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
         psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
         psoDesc.DepthStencilState.StencilEnable = FALSE;
-        //ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["BasePass"])));
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["BasePass"])));
     }
 }
 
@@ -458,6 +496,14 @@ static void CreateTexture2DSRV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDL
     srvDesc.Texture2D.MostDetailedMip = 0;
     srvDesc.Texture2D.MipLevels = 1;
     pDevice->CreateShaderResourceView(inResource, &srvDesc, inMemory);
+}
+
+static void CreateTexture2DRTV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, ID3D12Resource* inResource, DXGI_FORMAT inFormat)
+{
+    D3D12_RENDER_TARGET_VIEW_DESC srvDesc = {};
+    srvDesc.Format = inFormat;
+    srvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    pDevice->CreateRenderTargetView(inResource, &srvDesc, inMemory);
 }
 
 static void CreateRWStructuredBufferUAV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, ID3D12Resource* inResource, int inArraySize, int inElementSize, DXGI_FORMAT inFormat = DXGI_FORMAT_UNKNOWN)
@@ -510,8 +556,28 @@ void LumenApp::BuildDescriptorHeaps()
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
     CD3DX12_GPU_DESCRIPTOR_HANDLE hGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
-
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mSceneColor->mResource, mSceneColor->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferA->mResource, mGBufferA->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferB->mResource, mGBufferB->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferC->mResource, mGBufferC->mSRVFormat, 0);
     viewCount = 0;
+    mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
+    mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
+    mCPUViews["GBufferBSRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
+    mCPUViews["GBufferCSRV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
+
+    viewCount = SwapChainBufferCount;
+    hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mSceneColor->mResource, mSceneColor->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferA->mResource, mGBufferA->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferB->mResource, mGBufferB->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferC->mResource, mGBufferC->mRTVFormat);
+    viewCount = SwapChainBufferCount;
+    hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
+    mCPUViews["SceneColorRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
+    mCPUViews["GBufferARTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
+    mCPUViews["GBufferBRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
+    mCPUViews["GBufferCRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
 
     // DSV
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
@@ -527,6 +593,7 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DDSV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize), mSceneDepthZ);
 
     viewCount = 0;
+    hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mDsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mDsvDescriptorSize);
     mCPUViews["SceneDepthZDSV"] = hCpuDescriptor.Offset(viewCount++, mDsvDescriptorSize);
 }
 
