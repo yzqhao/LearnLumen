@@ -66,5 +66,8 @@
     <FxCompile Include="lumen\shader\MeshCardCapture.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
+    <FxCompile Include="lumen\shader\ClearCardCapture.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

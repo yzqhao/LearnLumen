@@ -155,8 +155,10 @@ void LumenApp::InitScene()
     Mat4 screenToWorld = screenToClip * clipToWorld;
     Mat4 worldToClip = sViewMatrix * sProjectionMatrix;
     Mat4 modelMatrix0, modelMatrix1;
-    modelMatrix0.a11 = 10.0f; modelMatrix0.a22 = 10.0f; modelMatrix0.a33 = 0.1f;
-    modelMatrix1.a11 = 10.0f; modelMatrix1.a22 = 10.0f; modelMatrix1.a33 = 0.1f;
+    modelMatrix0.a11 = 10.0f; modelMatrix0.a22 = 10.0f; modelMatrix0.a33 = 0.10009765625f;
+    //Surface Cache -> depth : uint4 RotateScale -> instance data
+    //sdf -> 
+    modelMatrix1.a11 = 10.0f; modelMatrix1.a22 = 10.0f; modelMatrix1.a33 = 0.10009765625f;
     modelMatrix1.a43 = 500.0f;
     mGlobalConstants.SetProjectionMatrix(sProjectionMatrix.m);
     mGlobalConstants.SetViewMatrix(sViewMatrix.m);
@@ -376,10 +378,170 @@ void LumenApp::Draw(const GameTimer& gt)
         barriers[0] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
+    {   //ClearCardCapture
+        auto ExecuteMeshCardCapturePass = [&](int inIndex) {
+            SCOPED_EVENT(mCommandList, L"ClearCardCapturePass");
+            mObjectCB->CopyData(0, mGlobalConstants);   // ÔøΩÔøΩÔøΩÔøΩconst buffer
+
+            D3D12_RESOURCE_BARRIER barriers[4];
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+            if (inIndex == 0) {
+                //mCommandList->DiscardResource(mLumenCardCaptureAlbedoAtlas->mResource, nullptr);
+                //mCommandList->DiscardResource(mLumenCardCaptureNormalAtlas->mResource, nullptr);
+                //mCommandList->DiscardResource(mLumenCardCaptureEmissiveAtlas->mResource, nullptr);
+                //mCommandList->DiscardResource(mLumenCardCaptureDSAtlas->mResource, nullptr);
+            }
+
+            D3D12_CPU_DESCRIPTOR_HANDLE colorRT[3] = { mCPUViews["LumenCardCaptureAlbedoAtlasRTV"], mCPUViews["LumenCardCaptureNormalAtlasRTV"], mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] };
+            D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+            mCommandList->OMSetRenderTargets(3, colorRT, FALSE, &dsRT);
+            float clearColor[] = { 0.0f,0.0f,0.0f,1.0f };
+
+            static const D3D12_VIEWPORT sViewports[] = {
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f},
+                {0,0,64.0f,8.0f,0.0f,1.0f}
+            };
+            static const D3D12_RECT sScissors[] = {
+                { 0,0,64,8 },
+                { 128, 0, 128, 8 },
+                { 128, 8, 128, 8 },
+                { 64, 0, 64, 8 },
+                { 256, 0, 128, 128 },
+                { 384, 0, 128, 128 },
+
+                { 0, 8, 64, 8 },
+                { 128, 16, 128, 8 },
+                { 128, 24, 128, 8 },
+                { 64, 8, 64, 8 },
+                { 0, 128, 128, 128 },
+                { 128, 128, 128, 128 },
+            };
+
+            mCommandList->SetGraphicsRootSignature(mRootSignatures["MeshCardCapture"]);
+            mCommandList->SetPipelineState(mPSOs["ClearCardCapture"]);
+
+            D3D12_RECT scissor = sScissors[inIndex];
+            D3D12_VIEWPORT viewport = {
+                float(scissor.left),float(scissor.top),float(scissor.right),float(scissor.bottom),0.0f,1.0f
+            };
+            scissor.right += scissor.left;
+            scissor.bottom += scissor.top;
+            mCommandList->RSSetViewports(1, &viewport);
+            mCommandList->RSSetScissorRects(1, &scissor);
+
+            const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mCommandList->OMSetBlendFactor(blendFactor);
+            mCommandList->OMSetStencilRef(0x84);
+
+            CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+            mCommandList->SetGraphicsRoot32BitConstants(1, 4, &mMisc, 0);
+
+            mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            D3D12_VERTEX_BUFFER_VIEW VBOView[2] = { mCubeGeo->VertexBufferView(),mCubeGeo->VertexBufferView2() };
+            mCommandList->IASetVertexBuffers(0, 2, VBOView);
+            mCommandList->IASetIndexBuffer(&mCubeGeo->IndexBufferView());
+            mCommandList->DrawIndexedInstanced(mCubeGeo->IndexCount, 1, 0, 0, 0);
+
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_GENERIC_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+            };
+        SCOPED_EVENT(mCommandList, L"ClearCardPass");
+        mMisc.misc[0] = 0;//camera position
+        mMisc.misc[1] = 0;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 1;//model matrix
+        ExecuteMeshCardCapturePass(0);
+
+        mMisc.misc[0] = 1;//camera position
+        mMisc.misc[1] = 1;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 1;//model matrix
+        ExecuteMeshCardCapturePass(1);
+
+        mMisc.misc[0] = 2;//camera position
+        mMisc.misc[1] = 2;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 1;//model matrix
+        ExecuteMeshCardCapturePass(2);
+
+        mMisc.misc[0] = 3;//camera position
+        mMisc.misc[1] = 3;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 1;//model matrix
+        ExecuteMeshCardCapturePass(3);
+
+        mMisc.misc[0] = 4;//camera position
+        mMisc.misc[1] = 4;//view matrix
+        mMisc.misc[2] = 1;//projection matrix
+        mMisc.misc[3] = 1;//model matrix
+        ExecuteMeshCardCapturePass(4);
+
+        mMisc.misc[0] = 5;//camera position
+        mMisc.misc[1] = 5;//view matrix
+        mMisc.misc[2] = 1;//projection matrix
+        mMisc.misc[3] = 1;//model matrix
+        ExecuteMeshCardCapturePass(5);
+        //bottom cube
+        mMisc.misc[0] = 6;//camera position
+        mMisc.misc[1] = 0;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 0;//model matrix
+        ExecuteMeshCardCapturePass(6);
+
+        mMisc.misc[0] = 7;//camera position
+        mMisc.misc[1] = 1;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 0;//model matrix
+        ExecuteMeshCardCapturePass(7);
+
+        mMisc.misc[0] = 8;//camera position
+        mMisc.misc[1] = 2;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 0;//model matrix
+        ExecuteMeshCardCapturePass(8);
+
+        mMisc.misc[0] = 9;//camera position
+        mMisc.misc[1] = 3;//view matrix
+        mMisc.misc[2] = 0;//projection matrix
+        mMisc.misc[3] = 0;//model matrix
+        ExecuteMeshCardCapturePass(9);
+
+        mMisc.misc[0] = 10;//camera position
+        mMisc.misc[1] = 4;//view matrix
+        mMisc.misc[2] = 1;//projection matrix
+        mMisc.misc[3] = 0;//model matrix
+        ExecuteMeshCardCapturePass(10);
+
+        mMisc.misc[0] = 11;//camera position
+        mMisc.misc[1] = 5;//view matrix
+        mMisc.misc[2] = 1;//projection matrix
+        mMisc.misc[3] = 0;//model matrix
+        ExecuteMeshCardCapturePass(11);
+    }
     {   //MeshCardCapturePass
         auto ExecuteMeshCardCapturePass = [&](int inIndex) {
             SCOPED_EVENT(mCommandList, L"MeshCardCapturePass");
-            mObjectCB->CopyData(0, mGlobalConstants);   // ∏¸–¬const buffer
+            mObjectCB->CopyData(0, mGlobalConstants);   // ÔøΩÔøΩÔøΩÔøΩconst buffer
 
             D3D12_RESOURCE_BARRIER barriers[4];
             barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -737,6 +899,8 @@ void LumenApp::BuildShadersAndInputLayout()
 	HRESULT hr = S_OK;
 
     mDxcByteCodes["PreZVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\PreZ.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["ClearCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ClearCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["ClearCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ClearCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["MeshCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\MeshCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["MeshCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\MeshCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["BasePassVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\BasePass.hlsl", nullptr, 0, L"VS", L"vs_6_6");
@@ -938,6 +1102,40 @@ void LumenApp::BuildPSO()
         psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         psoDesc.DepthStencilState.StencilEnable = FALSE;
         ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["MeshCardCapture"])));
+    }
+    {   //ClearCardCapture
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mInputLayout.data(), (uint)mInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["MeshCardCapture"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["ClearCardCaptureVS"]->GetBufferPointer()),
+            mDxcByteCodes["ClearCardCaptureVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["ClearCardCapturePS"]->GetBufferPointer()),
+            mDxcByteCodes["ClearCardCapturePS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.RasterizerState.FrontCounterClockwise = true;
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 3;
+        psoDesc.RTVFormats[0] = mLumenCardCaptureAlbedoAtlas->mRTVFormat;
+        psoDesc.RTVFormats[1] = mLumenCardCaptureNormalAtlas->mRTVFormat;
+        psoDesc.RTVFormats[2] = mLumenCardCaptureEmissiveAtlas->mRTVFormat;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = mLumenCardCaptureDSAtlas->mRTVFormat;
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["ClearCardCapture"])));
     }
 }
 
@@ -1302,7 +1500,7 @@ void LumenApp::BuildRootSignature()
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[2];
         slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
-        slotRootParameter[1].InitAsConstants(4, 1);		// 4∏ˆ32Œª÷µ
+        slotRootParameter[1].InitAsConstants(4, 1);		// 4‰∏™32‰ΩçÂÄº
 
         auto staticSamplers = GetStaticSamplers();
         CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
