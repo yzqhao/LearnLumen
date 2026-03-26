@@ -63,5 +63,8 @@
     <FxCompile Include="lumen\shader\DirectionalLighting.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
+    <FxCompile Include="lumen\shader\MeshCardCapture.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

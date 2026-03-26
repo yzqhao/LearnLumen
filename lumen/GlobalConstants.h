@@ -17,6 +17,10 @@ struct GlobalConstants
             float mModelMatrices[32];
             float mITModelMatrices[32];
             float mScreenToTranslatedWorld[16];
+            // mesh card
+            float mCameraPositionMeshCardCapture[48];
+            float mViewMatrixMeshCardCapture[96];//+x,-x,... axis
+            float mProjectionMatrixMeshCardCapture[32];
         };
         float mData[1024];
     };

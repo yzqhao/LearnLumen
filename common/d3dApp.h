@@ -93,7 +93,8 @@ protected:
 	
 	IDXGIFactory4* mdxgiFactory{};
 	IDXGISwapChain* mSwapChain{};
-	ID3D12Device* md3dDevice{};
+    ID3D12Device* md3dDevice{};
+    ID3D12Device10* md3dDevice10{};
 
 	ID3D12Fence* mFence{};
     UINT64 mCurrentFence = 0;

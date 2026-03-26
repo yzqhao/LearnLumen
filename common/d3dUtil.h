@@ -130,6 +130,20 @@ struct MeshGeometry
     }
 };
 
+struct ScopedEvent {
+    ID3D12GraphicsCommandList* mCmdList;
+    ScopedEvent(ID3D12GraphicsCommandList* inCmdlist, LPCTSTR inName) :mCmdList(inCmdlist) {
+        mCmdList->BeginEvent(0u, inName, (wcslen(inName) + 1) * sizeof(wchar_t));
+    }
+    ~ScopedEvent() {
+        mCmdList->EndEvent();
+    }
+};
+#define EVENT_VAR_INNER(inContext, inName, line) _scopedEvent_##line(inContext, inName)
+#define EventVar(inContext,inName,n) EVENT_VAR_INNER(inContext, inName, n)
+#define SCOPED_EVENT(inContext,inName) \
+        ScopedEvent EventVar(inContext,inName,__LINE__)
+
 class d3dUtil
 {
 public:

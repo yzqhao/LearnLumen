@@ -437,6 +437,8 @@ bool D3DApp::InitDirect3D()
 			IID_PPV_ARGS(&md3dDevice)));
 	}
 
+	ThrowIfFailed(md3dDevice->QueryInterface(IID_PPV_ARGS(&md3dDevice10)));
+
 	ThrowIfFailed(md3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE,
 		IID_PPV_ARGS(&mFence)));
 

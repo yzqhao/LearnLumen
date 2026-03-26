@@ -44,6 +44,11 @@ private:
 private:
     D3DResource* InitBufferFromFile(const wchar_t* resname, const char* file);
 
+    struct Misc
+    {
+        unsigned int misc[4];  //0:camera pos index,1:view matrix,2:projection matrix
+    } mMisc;
+
     UINT mCbvSrvDescriptorSize = 0;
 
     ID3D12DescriptorHeap* mDescriptorHeap = nullptr;
@@ -68,6 +73,16 @@ private:
     D3DImage* mGBufferC;
     D3DImage* mToneMap;
     D3DImage* mShadowMaskTexture;
+    //lumen
+    D3DImage* mLumenCardCaptureAlbedoAtlas;
+    D3DImage* mLumenCardCaptureNormalAtlas;
+    D3DImage* mLumenCardCaptureEmissiveAtlas;
+    D3DImage* mLumenCardCaptureDSAtlas;
+    D3DImage* mLumenSceneDepth;
+    D3DImage* mLumenSceneAlbedo;
+    D3DImage* mLumenSceneOpacity;
+    D3DImage* mLumenSceneNormal;
+    D3DImage* mLumenSceneEmissive;
 
     
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mPosOnlyInputLayout;
