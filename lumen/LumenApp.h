@@ -65,6 +65,7 @@ private:
     D3DResource* mCubeIndexBuffer;
     D3DResource* mCubeAttributeBuffer;
     D3DResource* mDFSceneObject;
+    D3DResource* mClearCardBuffer;
 
     D3DImage* mSceneDepthZ;
     D3DImage* mSceneColor;

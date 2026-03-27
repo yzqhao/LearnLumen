@@ -1,53 +1,44 @@
-cbuffer GlobalConstants{
-    float4x4 mProjectionMatrix;
-    float4x4 mViewMatrix;
-    float4x4 mWorldToClipMatrix;
-    float4 mCameraPositionHighWS;
-    float4 mCameraPositionLowWS;
-    float4 mViewDirectionWS;
-    float4 mViewRightWS;
-    float4 mViewUpWS;
-    float4x4 mModelMatrices[2];//scale translate
-    float4x4 mITModelMatrices[2];
-    float4x4 mScreenToTranslatedWorld;
-    float4 mCameraPositionMeshCardCapture[12];
-    float4x4 mViewMatrixMeshCardCapture[6];//+x,-x,... axis
-    float4x4 mProjectionMatrixMeshCardCapture[2];
+ByteAddressBuffer RectCoordBuffer : register(t0);
+
+int2 select_internal(bool2 c, int2 a, int2 b)
+{
+    return int2(c.x ? a.x : b.x, c.y ? a.y : b.y);
 }
 
-cbuffer RootConstant : register(b1)
+bool2 VertMax(uint VertexId)
 {
-    uint4 mMisc;
-};
-
-void VS(in float3 inPositionMS: POSITION,
-    in float4 inTangentX:TANGENTX,
-    in float4 inTangentZ:TANGENTZ,
-    out float4 outPosition:SV_POSITION,
-    out float3 outNormal:NORMAL)
-{
-    uint cameraPositionIndex=mMisc.x;
-    uint viewMatrixIndex=mMisc.y;
-    uint projectionMatrixIndex=mMisc.z;
-    uint modelMatrixIndex=mMisc.w;
-    float4 positionWS=mul(float4(inPositionMS,1.0f),mModelMatrices[modelMatrixIndex]);
-    positionWS=float4(positionWS.xyz-mCameraPositionMeshCardCapture[cameraPositionIndex].xyz,1.0f);//translated world
-    float4 positionVS=mul(positionWS,mViewMatrixMeshCardCapture[viewMatrixIndex]);
-    float4 positionCS=mul(positionVS,mProjectionMatrixMeshCardCapture[projectionMatrixIndex]);
-    float3 normal=mul(float4(inTangentZ.xyz,0.0f),mITModelMatrices[modelMatrixIndex]).xyz;
-    outNormal=normal;
-    positionCS.z=0.0f;//depth
-    outPosition = positionCS;
+    bool2 bVertMax;
+    bVertMax.x = VertexId == 1 || VertexId == 2 || VertexId == 4;
+    bVertMax.y = VertexId == 2 || VertexId == 4 || VertexId == 5;
+    return bVertMax;
 }
+
+//render target -> rect/sprite
+// RasterizeToRects
+void VS(
+	in uint InstanceId : SV_InstanceID, //0~11
+	in uint VertexId : SV_VertexID, //0~5
+	out float4 OutPosition : SV_POSITION)
+{
+    float2 InvViewSize = float2(0.0019531f, 0.0019531f);
+    uint RectCoord0 = RectCoordBuffer.Load(InstanceId * 16u);
+    uint RectCoord1 = RectCoordBuffer.Load(InstanceId * 16u + 4);
+    uint RectCoord2 = RectCoordBuffer.Load(InstanceId * 16u + 8);
+    uint RectCoord3 = RectCoordBuffer.Load(InstanceId * 16u + 12);
+    uint4 RectCoord = uint4(RectCoord0, RectCoord1, RectCoord2, RectCoord3);
+    //RectCoordBuffer[ InstanceId];
+    uint2 VertexCoord = select_internal(VertMax(VertexId), RectCoord.zw, RectCoord.xy);
+    OutPosition = float4(float2(VertexCoord) * InvViewSize * float2(2.0f, -2.0f) + float2(-1.0, 1.0f), 0.0f, 1.0f);
+}
+
 //(0.0f,0.0f,1.0f) => (0.3,0.4,0.4) => 0.3*0.3+0.4*0.4+0.4*0.4 != 1.0
 void PS(
-    in float4 inPosition : SV_POSITION,
-    in float3 inNormal : NORMAL,
     out float4 outRT0 : SV_TARGET0, //albedo
     out float4 outRT1 : SV_TARGET1, //normal
-    out float4 outRT2 : SV_TARGET2)//emissive
-{
-    outRT0=float4(0.0f,0.0f,0.0f,0.0f);
-    outRT1=float4(0.5f,0.5f,0.0f,0.0f);
-    outRT2=float4(0.0f,0.0f,0.0f,0.0f);
+    out float4 outRT2 : SV_TARGET2)
+{ //emissive
+
+    outRT0 = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    outRT1 = float4(0.5f, 0.5f, 0.0f, 0.0f);
+    outRT2 = float4(0.0f, 0.0f, 0.0f, 0.0f);
 }
