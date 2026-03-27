@@ -587,6 +587,53 @@ void LumenApp::Draw(const GameTimer& gt)
         mMisc.misc[3] = 0;//model matrix
         ExecuteMeshCardCapturePass(11);
     }
+    {   //CopyToSurfaceCacheDepth
+        SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheDepth");
+        mObjectCB->CopyData(0, mGlobalConstants);   // ����const buffer
+
+        D3D12_RESOURCE_BARRIER barriers[3];
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        barriers[2] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
+        //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+        mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
+
+        D3D12_RECT scissor = { 0,0,4096,4096 };
+        D3D12_VIEWPORT viewport = {
+            0.0f,0.0f,4096,4096,0.0f,1.0f
+        };
+
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["CopyToSurfaceCacheDepth"]);
+        mCommandList->SetPipelineState(mPSOs["CopyToSurfaceCacheDepth"]);
+
+        mCommandList->RSSetViewports(1, &viewport);
+        mCommandList->RSSetScissorRects(1, &scissor);
+        float clearColor[] = { 1.0f,0.0f,0.0f,1.0f };
+        mCommandList->ClearRenderTargetView(colorRT[0],
+            clearColor, 0, nullptr);
+
+        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        mCommandList->OMSetBlendFactor(blendFactor);
+        mCommandList->OMSetStencilRef(0x84);
+
+        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenCardCaptureDSAtlasSRV"]);
+
+        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        mCommandList->DrawInstanced(6, 12, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[2] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
     {   // BasePass
         SCOPED_EVENT(mCommandList, L"BasePass");
         D3D12_RESOURCE_BARRIER barriers[5];
@@ -792,6 +839,8 @@ void LumenApp::BuildShadersAndInputLayout()
     mDxcByteCodes["ClearCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ClearCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["MeshCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\MeshCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["MeshCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\MeshCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheDepthVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheDepth.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheDepthPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheDepth.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["BasePassVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\BasePass.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["BasePassPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\BasePass.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["DirectionalLightingVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\DirectionalLighting.hlsl", nullptr, 0, L"VS", L"vs_6_6");
@@ -986,8 +1035,8 @@ void LumenApp::BuildPSO()
         psoDesc.SampleDesc.Count = 1;
         psoDesc.SampleDesc.Quality = 0;
         psoDesc.DSVFormat = mLumenCardCaptureDSAtlas->mRTVFormat;
-        psoDesc.DepthStencilState.DepthEnable = FALSE;
-        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthEnable = TRUE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
         psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         psoDesc.DepthStencilState.StencilEnable = FALSE;
         ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["MeshCardCapture"])));
@@ -1026,6 +1075,39 @@ void LumenApp::BuildPSO()
         psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
         psoDesc.DepthStencilState.StencilEnable = FALSE;
         ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["ClearCardCapture"])));
+    }
+    {   //CopyToSurfaceCacheDepth
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mInputLayout.data(), (uint)mInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["CopyToSurfaceCacheDepth"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CopyToSurfaceCacheDepthVS"]->GetBufferPointer()),
+            mDxcByteCodes["CopyToSurfaceCacheDepthVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CopyToSurfaceCacheDepthPS"]->GetBufferPointer()),
+            mDxcByteCodes["CopyToSurfaceCacheDepthPS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.RasterizerState.FrontCounterClockwise = true;
+        psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = mLumenSceneDepth->mRTVFormat;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["CopyToSurfaceCacheDepth"])));
     }
 }
 
@@ -1131,6 +1213,7 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mResource, mLumenCardCaptureAlbedoAtlas->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureNormalAtlas->mResource, mLumenCardCaptureNormalAtlas->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureDSAtlas->mResource, mLumenCardCaptureDSAtlas->mSRVFormat, 0);
     viewCount = 0;
     mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
@@ -1142,6 +1225,7 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenCardCaptureAlbedoAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mCPUViews["LumenCardCaptureNormalAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mCPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardCaptureDSAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     viewCount = 0;
     mGPUViews["SceneColorSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mGPUViews["GBufferASRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
@@ -1153,6 +1237,7 @@ void LumenApp::BuildDescriptorHeaps()
     mGPUViews["LumenCardCaptureAlbedoAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mGPUViews["LumenCardCaptureNormalAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mGPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardCaptureDSAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
 
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
@@ -1164,6 +1249,7 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mResource, mLumenCardCaptureAlbedoAtlas->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureNormalAtlas->mResource, mLumenCardCaptureNormalAtlas->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenSceneDepth->mResource, mLumenSceneDepth->mRTVFormat);
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
     mCPUViews["SceneColorRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
@@ -1174,6 +1260,7 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenCardCaptureAlbedoAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
     mCPUViews["LumenCardCaptureNormalAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
     mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
+    mCPUViews["LumenSceneDepthRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
 
     // DSV
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
@@ -1440,6 +1527,40 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["ClearCardCapture"])));
     }
+    {   //CopyToSurfaceCacheDepth
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE srvTable1;
+        srvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[4];
+        slotRootParameter[0].InitAsShaderResourceView(0);
+        slotRootParameter[1].InitAsShaderResourceView(1);
+        slotRootParameter[2].InitAsDescriptorTable(1, &srvTable0);
+        slotRootParameter[3].InitAsDescriptorTable(1, &srvTable1);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["CopyToSurfaceCacheDepth"])));
+    }
 }
 
 D3DResource* LumenApp::InitBufferFromFile(const wchar_t* resname, const char* file)
@@ -1501,6 +1622,74 @@ void LumenApp::BuildBuffers()
             sizeof(rectData),
             uploadBuffer);
         mClearCardBuffer->mResource->SetName(L"ClearCardBuffer");
+    }
+    {   //RectDataBuffer
+        const D3D12_RECT scissors[] = {
+            { 0,0,64,8 },
+            { 128, 0, 128, 8 },
+            { 128, 8, 128, 8 },
+            { 64, 0, 64, 8 },
+            { 256, 0, 128, 128 },
+            { 384, 0, 128, 128 },
+
+            { 0, 8, 64, 8 },
+            { 128, 16, 128, 8 },
+            { 128, 24, 128, 8 },
+            { 64, 8, 64, 8 },
+            { 512, 0, 128, 128 },
+            { 640, 0, 128, 128 },
+        };
+        int rectData[12 * 4];
+        for (int i = 0; i < 12; i++) {
+            int offset = i * 4;
+            rectData[offset] = scissors[i].left;
+            rectData[offset + 1] = scissors[i].top;
+            rectData[offset + 2] = scissors[i].left + scissors[i].right;
+            rectData[offset + 3] = scissors[i].top + scissors[i].bottom;
+        }
+        ID3D12Resource* uploadBuffer = nullptr;
+        mRectDataBuffer = new D3DResource(D3D12_RESOURCE_STATE_COMMON);
+        mRectDataBuffer->mResource = d3dUtil::CreateDefaultBuffer(
+            md3dDevice,
+            mCommandList,
+            rectData,
+            sizeof(rectData),
+            uploadBuffer);
+        mRectDataBuffer->mResource->SetName(L"RectDataBuffer");
+    }
+    {   //RectUVBuffer
+        const D3D12_RECT scissors[] = {
+            { 0,0,64,8 },
+            { 128, 0, 128, 8 },
+            { 128, 8, 128, 8 },
+            { 64, 0, 64, 8 },
+            { 256, 0, 128, 128 },
+            { 384, 0, 128, 128 },
+
+            { 0, 8, 64, 8 },
+            { 128, 16, 128, 8 },
+            { 128, 24, 128, 8 },
+            { 64, 8, 64, 8 },
+            { 0, 128, 128, 128 },
+            { 128, 128, 128, 128 },
+        };
+        int rectData[12 * 4];
+        for (int i = 0; i < 12; i++) {
+            int offset = i * 4;
+            rectData[offset] = scissors[i].left;
+            rectData[offset + 1] = scissors[i].top;
+            rectData[offset + 2] = scissors[i].left + scissors[i].right;
+            rectData[offset + 3] = scissors[i].top + scissors[i].bottom;
+        }
+        ID3D12Resource* uploadBuffer = nullptr;
+        mRectUVBuffer = new D3DResource(D3D12_RESOURCE_STATE_COMMON);
+        mRectUVBuffer->mResource = d3dUtil::CreateDefaultBuffer(
+            md3dDevice,
+            mCommandList,
+            rectData,
+            sizeof(rectData),
+            uploadBuffer);
+        mRectUVBuffer->mResource->SetName(L"RectUVBuffer");
     }
     {
         //(8x8)work group
@@ -1564,8 +1753,8 @@ void LumenApp::BuildBuffers()
 
         mLumenSceneDepth = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
             DXGI_FORMAT_R16_UNORM, DXGI_FORMAT_R16_UNORM,
-            DXGI_FORMAT_R16_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-            { DXGI_FORMAT_R16_UNORM, { 1.0f,0 } });
+            DXGI_FORMAT_R16_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+            { DXGI_FORMAT_R16_UNORM, { 1.0f,0.0f,0.0f,1.0f } });
         mLumenSceneDepth->mResource->SetName(L"Lumen.SceneDepth");
 
         {
