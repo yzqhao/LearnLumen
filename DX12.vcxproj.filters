@@ -72,5 +72,8 @@
     <FxCompile Include="lumen\shader\CopyToSurfaceCacheDepth.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
+    <FxCompile Include="lumen\shader\CompressToSurfaceCacheAlbedo.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
