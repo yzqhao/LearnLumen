@@ -75,5 +75,14 @@
     <FxCompile Include="lumen\shader\CompressToSurfaceCacheAlbedo.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
+    <FxCompile Include="lumen\shader\CompressToSurfaceCacheEmissive.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\CompressToSurfaceCacheNormal.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\CopyToSurfaceCacheOpacity.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

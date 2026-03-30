@@ -674,6 +674,130 @@ void LumenApp::Draw(const GameTimer& gt)
         barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
+    {   //CopyToSurfaceCacheOpacity
+        SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheOpacity");
+
+        D3D12_RESOURCE_BARRIER barriers[2];
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneOpacityRTV"] };
+        mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
+        float clearColor[] = { 1.0f,0.0f,0.0f,1.0f };
+        mCommandList->ClearRenderTargetView(colorRT[0],
+            clearColor, 0, nullptr);
+
+        D3D12_RECT scissor = { 0,0,4096,4096 };
+        D3D12_VIEWPORT viewport = {
+            0.0f,0.0f,4096,4096,0.0f,1.0f
+        };
+
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["CopyToSurfaceCacheOpacity"]);
+        mCommandList->SetPipelineState(mPSOs["CopyToSurfaceCacheOpacity"]);
+
+        mCommandList->RSSetViewports(1, &viewport);
+        mCommandList->RSSetScissorRects(1, &scissor);
+
+        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        mCommandList->OMSetBlendFactor(blendFactor);
+        mCommandList->OMSetStencilRef(0x84);
+
+        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureAlbedoAtlasSRV"]);
+
+        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        mCommandList->DrawInstanced(6, 12, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+    {   //CompressToSurfaceCacheNormal
+        SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheNormal");
+
+        D3D12_RESOURCE_BARRIER barriers[2];
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
+        //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+        mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
+
+        D3D12_RECT scissor = { 0,0,1024,1024 };
+        D3D12_VIEWPORT viewport = {
+            0.0f,0.0f,1024,1024,0.0f,1.0f
+        };
+
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
+        mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheNormal"]);
+
+        mCommandList->RSSetViewports(1, &viewport);
+        mCommandList->RSSetScissorRects(1, &scissor);
+
+        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        mCommandList->OMSetBlendFactor(blendFactor);
+        mCommandList->OMSetStencilRef(0x84);
+
+        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneNormalUAV"]);
+
+        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        mCommandList->DrawInstanced(6, 12, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+    {   //CompressToSurfaceCacheEmissive
+        SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheEmissive");
+
+        D3D12_RESOURCE_BARRIER barriers[2];
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
+        //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+        mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
+
+        D3D12_RECT scissor = { 0,0,1024,1024 };
+        D3D12_VIEWPORT viewport = {
+            0.0f,0.0f,1024,1024,0.0f,1.0f
+        };
+
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
+        mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheEmissive"]);
+
+        mCommandList->RSSetViewports(1, &viewport);
+        mCommandList->RSSetScissorRects(1, &scissor);
+
+        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        mCommandList->OMSetBlendFactor(blendFactor);
+        mCommandList->OMSetStencilRef(0x84);
+
+        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureEmissiveAtlasSRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneEmissiveUAV"]);
+
+        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        mCommandList->DrawInstanced(6, 12, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
     {   // BasePass
         SCOPED_EVENT(mCommandList, L"BasePass");
         D3D12_RESOURCE_BARRIER barriers[5];
@@ -883,6 +1007,12 @@ void LumenApp::BuildShadersAndInputLayout()
     mDxcByteCodes["CopyToSurfaceCacheDepthPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheDepth.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["CompressToSurfaceCacheAlbedoVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheAlbedo.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["CompressToSurfaceCacheAlbedoPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheAlbedo.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheNormalVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheNormal.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheNormalPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheNormal.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheEmissiveVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheEmissive.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheEmissivePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheEmissive.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheOpacityVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheOpacity.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheOpacityPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheOpacity.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["BasePassVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\BasePass.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["BasePassPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\BasePass.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["DirectionalLightingVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\DirectionalLighting.hlsl", nullptr, 0, L"VS", L"vs_6_6");
@@ -1183,6 +1313,103 @@ void LumenApp::BuildPSO()
         psoDesc.DepthStencilState.StencilEnable = FALSE;
         ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["CompressToSurfaceCacheAlbedo"])));
     }
+    {   //CompressToSurfaceCacheNormal
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mInputLayout.data(), (uint)mInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["CompressToSurfaceCacheAlbedo"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CompressToSurfaceCacheNormalVS"]->GetBufferPointer()),
+            mDxcByteCodes["CompressToSurfaceCacheNormalVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CompressToSurfaceCacheNormalPS"]->GetBufferPointer()),
+            mDxcByteCodes["CompressToSurfaceCacheNormalPS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.RasterizerState.FrontCounterClockwise = true;
+        psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 0;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["CompressToSurfaceCacheNormal"])));
+    }
+    {   //CompressToSurfaceCacheEmissive
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mInputLayout.data(), (uint)mInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["CompressToSurfaceCacheAlbedo"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CompressToSurfaceCacheEmissiveVS"]->GetBufferPointer()),
+            mDxcByteCodes["CompressToSurfaceCacheEmissiveVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CompressToSurfaceCacheEmissivePS"]->GetBufferPointer()),
+            mDxcByteCodes["CompressToSurfaceCacheEmissivePS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.RasterizerState.FrontCounterClockwise = true;
+        psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 0;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["CompressToSurfaceCacheEmissive"])));
+    }
+    {   //CopyToSurfaceCacheOpacity
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mInputLayout.data(), (uint)mInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["CopyToSurfaceCacheOpacity"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CopyToSurfaceCacheOpacityVS"]->GetBufferPointer()),
+            mDxcByteCodes["CopyToSurfaceCacheOpacityVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["CopyToSurfaceCacheOpacityPS"]->GetBufferPointer()),
+            mDxcByteCodes["CopyToSurfaceCacheOpacityPS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.RasterizerState.FrontCounterClockwise = true;
+        psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = mLumenSceneOpacity->mRTVFormat;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["CopyToSurfaceCacheOpacity"])));
+    }
 }
 
 static void CreateTexture2DDSV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, D3DImage* inDSRT, D3D12_DSV_FLAGS inFlags=D3D12_DSV_FLAG_NONE)
@@ -1289,6 +1516,8 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureDSAtlas->mResource, mLumenCardCaptureDSAtlas->mSRVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenSceneAlbedo->mResource, mLumenSceneAlbedo->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenSceneNormal->mResource, mLumenSceneNormal->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenSceneEmissive->mResource, mLumenSceneEmissive->mRTVFormat, 0);
     viewCount = 0;
     mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
@@ -1302,6 +1531,8 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mCPUViews["LumenCardCaptureDSAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneAlbedoUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneNormalUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneEmissiveUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     viewCount = 0;
     mGPUViews["SceneColorSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mGPUViews["GBufferASRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
@@ -1315,6 +1546,8 @@ void LumenApp::BuildDescriptorHeaps()
     mGPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mGPUViews["LumenCardCaptureDSAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
     mGPUViews["LumenSceneAlbedoUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneNormalUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneEmissiveUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
 
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
@@ -1327,6 +1560,7 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureNormalAtlas->mResource, mLumenCardCaptureNormalAtlas->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenSceneDepth->mResource, mLumenSceneDepth->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenSceneOpacity->mResource, mLumenSceneOpacity->mRTVFormat);
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
     mCPUViews["SceneColorRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
@@ -1338,6 +1572,7 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenCardCaptureNormalAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
     mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
     mCPUViews["LumenSceneDepthRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
+    mCPUViews["LumenSceneOpacityRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
 
     // DSV
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
@@ -1671,6 +1906,37 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferPointer(),
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["CompressToSurfaceCacheAlbedo"])));
+    }
+    {   //CopyToSurfaceCacheOpacity
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[3];
+        slotRootParameter[0].InitAsShaderResourceView(0);
+        slotRootParameter[1].InitAsShaderResourceView(1);
+        slotRootParameter[2].InitAsDescriptorTable(1, &srvTable0);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["CopyToSurfaceCacheOpacity"])));
     }
 }
 
