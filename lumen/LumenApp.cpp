@@ -387,7 +387,7 @@ void LumenApp::Draw(const GameTimer& gt)
             barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
             barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
             barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_READ);
+            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
             mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
             D3D12_CPU_DESCRIPTOR_HANDLE colorRT[3] = { mCPUViews["LumenCardCaptureAlbedoAtlasRTV"], mCPUViews["LumenCardCaptureNormalAtlasRTV"], mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] };
@@ -420,7 +420,7 @@ void LumenApp::Draw(const GameTimer& gt)
             barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
             barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
             barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
             mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
             };
@@ -436,7 +436,7 @@ void LumenApp::Draw(const GameTimer& gt)
             barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
             barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
             barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_READ);
+            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
             mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
             if (inIndex == 0) {
@@ -510,7 +510,7 @@ void LumenApp::Draw(const GameTimer& gt)
             barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
             barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
             barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
             mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
             };
@@ -805,7 +805,7 @@ void LumenApp::Draw(const GameTimer& gt)
         barriers[1] = InitResourceBarrier(mGBufferA->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
         barriers[2] = InitResourceBarrier(mGBufferB->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
         barriers[3] = InitResourceBarrier(mGBufferC->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        barriers[4] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_READ);
+        barriers[4] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
         D3D12_CPU_DESCRIPTOR_HANDLE colorRT[4] = { mCPUViews["SceneColorRTV"], mCPUViews["GBufferARTV"], mCPUViews["GBufferBRTV"], mCPUViews["GBufferCRTV"] };
@@ -839,7 +839,7 @@ void LumenApp::Draw(const GameTimer& gt)
         barriers[1] = InitResourceBarrier(mGBufferA->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
         barriers[2] = InitResourceBarrier(mGBufferB->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
         barriers[3] = InitResourceBarrier(mGBufferC->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[4] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[4] = InitResourceBarrier(mSceneDepthZ->mResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
     {   //ShadowMask
@@ -1551,28 +1551,30 @@ void LumenApp::BuildDescriptorHeaps()
 
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mSceneColor->mResource, mSceneColor->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferA->mResource, mGBufferA->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferB->mResource, mGBufferB->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mGBufferC->mResource, mGBufferC->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mToneMap->mResource, mToneMap->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mResource, mLumenCardCaptureAlbedoAtlas->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureNormalAtlas->mResource, mLumenCardCaptureNormalAtlas->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenSceneDepth->mResource, mLumenSceneDepth->mRTVFormat);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize), mLumenSceneOpacity->mResource, mLumenSceneOpacity->mRTVFormat);
+    hCpuDescriptor.Offset(SwapChainBufferCount, mRtvDescriptorSize);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mSceneColor->mResource, mSceneColor->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mGBufferA->mResource, mGBufferA->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mGBufferB->mResource, mGBufferB->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mGBufferC->mResource, mGBufferC->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mToneMap->mResource, mToneMap->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mResource, mLumenCardCaptureAlbedoAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenCardCaptureNormalAtlas->mResource, mLumenCardCaptureNormalAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneDepth->mResource, mLumenSceneDepth->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneOpacity->mResource, mLumenSceneOpacity->mRTVFormat);
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
-    mCPUViews["SceneColorRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["GBufferARTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["GBufferBRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["GBufferCRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["ToneMapRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["LumenCardCaptureAlbedoAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["LumenCardCaptureNormalAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["LumenSceneDepthRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
-    mCPUViews["LumenSceneOpacityRTV"] = hCpuDescriptor.Offset(viewCount++, mRtvDescriptorSize);
+    hCpuDescriptor.Offset(SwapChainBufferCount, mRtvDescriptorSize);
+    mCPUViews["SceneColorRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["GBufferARTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["GBufferBRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["GBufferCRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["ToneMapRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenCardCaptureAlbedoAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenCardCaptureNormalAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenSceneDepthRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenSceneOpacityRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
 
     // DSV
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
