@@ -891,6 +891,39 @@ void LumenApp::Draw(const GameTimer& gt)
         barriers[0] = InitResourceBarrier(mSceneColor->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
+    {   //LumenSceneLighting
+        SCOPED_EVENT(mCommandList, L"LumenSceneLighting");
+        {   //DirectLighting
+            SCOPED_EVENT(mCommandList, L"DirectLighting");
+            D3D12_RESOURCE_BARRIER barriers[3];
+            barriers[0] = InitResourceBarrier(mLumenSceneNormal->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            barriers[1] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            barriers[2] = InitResourceBarrier(mLumenSceneDirectLighting->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            barriers[2] = InitResourceBarrier(mLumenSceneFinalLighting->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+            mCommandList->SetPipelineState(mPSOs["DirectLighting"]);
+            mCommandList->SetComputeRootSignature(mRootSignatures["DirectLighting"]);
+
+            CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            mCommandList->SetComputeRootDescriptorTable(0, hCbvGpuDescriptor);
+            mCommandList->SetComputeRootShaderResourceView(1, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetComputeRootShaderResourceView(2, mDFSceneObject->mResource->GetGPUVirtualAddress());
+            mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["LumenSceneNormalSRV"]);   //mLumenSceneNormal->mResource->GetGPUVirtualAddress()
+            mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["LumenSceneDepthSRV"]);   //mLumenSceneDepth->mResource->GetGPUVirtualAddress()
+            mCommandList->SetComputeRootShaderResourceView(5, mLumenCards->mResource->GetGPUVirtualAddress());
+            mCommandList->SetComputeRootDescriptorTable(6, mGPUViews["LumenSceneDirectLightingUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(7, mGPUViews["LumenSceneFinalLightingUAV"]);
+
+            mCommandList->Dispatch(12, 1, 1);
+
+            barriers[0] = InitResourceBarrier(mLumenSceneNormal->mResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[1] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[2] = InitResourceBarrier(mLumenSceneDirectLighting->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[2] = InitResourceBarrier(mLumenSceneFinalLighting->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        }
+    }
     {   //ToneMap
         SCOPED_EVENT(mCommandList, L"ToneMap");
         D3D12_RESOURCE_BARRIER barriers[1];
@@ -1020,6 +1053,7 @@ void LumenApp::BuildShadersAndInputLayout()
     mDxcByteCodes["ShadowMaskCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ShadowMask.hlsl", nullptr, 0, L"CS", L"cs_6_6");
     mDxcByteCodes["ToneMappingVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ToneMapping.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["ToneMappingPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ToneMapping.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["DirectLightingCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\DirectLighting.hlsl", nullptr, 0, L"CS", L"cs_6_6");
 
 
 	mPosOnlyInputLayout =
@@ -1410,6 +1444,17 @@ void LumenApp::BuildPSO()
         psoDesc.DepthStencilState.StencilEnable = FALSE;
         ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["CopyToSurfaceCacheOpacity"])));
     }
+    {   //DirectLighting
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["DirectLighting"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["DirectLightingCS"]->GetBufferPointer()),
+            mDxcByteCodes["DirectLightingCS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["DirectLighting"])));
+    }
 }
 
 static void CreateTexture2DDSV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, D3DImage* inDSRT, D3D12_DSV_FLAGS inFlags=D3D12_DSV_FLAG_NONE)
@@ -1504,50 +1549,62 @@ void LumenApp::BuildDescriptorHeaps()
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
     CD3DX12_GPU_DESCRIPTOR_HANDLE hGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mSceneColor->mResource, mSceneColor->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferA->mResource, mGBufferA->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferB->mResource, mGBufferB->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mGBufferC->mResource, mGBufferC->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mSceneDepthZ->mResource, mSceneDepthZ->mSRVFormat, 0);
-    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mShadowMaskTexture->mResource, mShadowMaskTexture->mFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mShadowMaskTexture->mResource, mShadowMaskTexture->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mResource, mLumenCardCaptureAlbedoAtlas->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureNormalAtlas->mResource, mLumenCardCaptureNormalAtlas->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mSRVFormat, 0);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenCardCaptureDSAtlas->mResource, mLumenCardCaptureDSAtlas->mSRVFormat, 0);
-    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenSceneAlbedo->mResource, mLumenSceneAlbedo->mRTVFormat, 0);
-    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenSceneNormal->mResource, mLumenSceneNormal->mRTVFormat, 0);
-    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize), mLumenSceneEmissive->mResource, mLumenSceneEmissive->mRTVFormat, 0);
-    viewCount = 0;
-    mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["GBufferBSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["GBufferCSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["SceneDepthZSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["ShadowMaskTextureUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["ShadowMaskTextureSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["LumenCardCaptureAlbedoAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["LumenCardCaptureNormalAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["LumenCardCaptureDSAtlasSRV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["LumenSceneAlbedoUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["LumenSceneNormalUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mCPUViews["LumenSceneEmissiveUAV"] = hCpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    viewCount = 0;
-    mGPUViews["SceneColorSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["GBufferASRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["GBufferBSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["GBufferCSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["SceneDepthZSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["ShadowMaskTextureUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["ShadowMaskTextureSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["LumenCardCaptureAlbedoAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["LumenCardCaptureNormalAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["LumenCardCaptureDSAtlasSRV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["LumenSceneAlbedoUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["LumenSceneNormalUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
-    mGPUViews["LumenSceneEmissiveUAV"] = hGpuDescriptor.Offset(viewCount++, mCbvSrvDescriptorSize);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mSceneColor->mResource, mSceneColor->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGBufferA->mResource, mGBufferA->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGBufferB->mResource, mGBufferB->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGBufferC->mResource, mGBufferC->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mSceneDepthZ->mResource, mSceneDepthZ->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mShadowMaskTexture->mResource, mShadowMaskTexture->mFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mShadowMaskTexture->mResource, mShadowMaskTexture->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mResource, mLumenCardCaptureAlbedoAtlas->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureNormalAtlas->mResource, mLumenCardCaptureNormalAtlas->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mResource, mLumenCardCaptureEmissiveAtlas->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureDSAtlas->mResource, mLumenCardCaptureDSAtlas->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneAlbedo->mResource, mLumenSceneAlbedo->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mResource, mLumenSceneNormal->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneEmissive->mResource, mLumenSceneEmissive->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDirectLighting->mResource, mLumenSceneDirectLighting->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneFinalLighting->mResource, mLumenSceneFinalLighting->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDepth->mResource, mLumenSceneDepth->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mResource, mLumenSceneNormal->mSRVFormat, 0);
+
+    mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GBufferBSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GBufferCSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["SceneDepthZSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ShadowMaskTextureUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ShadowMaskTextureSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardCaptureAlbedoAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardCaptureNormalAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardCaptureDSAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneAlbedoUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneNormalUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneEmissiveUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneDirectLightingUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneFinalLightingUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneDepthSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneNormalSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+
+    mGPUViews["SceneColorSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GBufferASRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GBufferBSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GBufferCSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["SceneDepthZSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ShadowMaskTextureUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ShadowMaskTextureSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardCaptureAlbedoAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardCaptureNormalAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardCaptureEmissiveAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardCaptureDSAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneAlbedoUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneNormalUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneEmissiveUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneDirectLightingUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneFinalLightingUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneDepthSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneNormalSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
@@ -1940,6 +1997,60 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["CopyToSurfaceCacheOpacity"])));
     }
+    {   //DirectLighting
+        CD3DX12_DESCRIPTOR_RANGE uavTable0;
+        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1;
+        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable1;
+        srvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE srvTable2;
+        srvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE srvTable3;
+        srvTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE srvTable4;
+        srvTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[8];
+        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+        slotRootParameter[1].InitAsShaderResourceView(0);
+        slotRootParameter[2].InitAsShaderResourceView(1);
+        //slotRootParameter[3].InitAsShaderResourceView(2);
+        //slotRootParameter[4].InitAsShaderResourceView(3);
+        slotRootParameter[3].InitAsDescriptorTable(1, &srvTable2);
+        slotRootParameter[4].InitAsDescriptorTable(1, &srvTable3);
+        slotRootParameter[5].InitAsShaderResourceView(4);
+        slotRootParameter[6].InitAsDescriptorTable(1, &uavTable0);
+        slotRootParameter[7].InitAsDescriptorTable(1, &uavTable1);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(8, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["DirectLighting"])));
+    }
 }
 
 D3DResource* LumenApp::InitBufferFromFile(const wchar_t* resname, const char* file)
@@ -1967,6 +2078,7 @@ void LumenApp::BuildBuffers()
         mCubeIndexBuffer = InitBufferFromFile(L"CubeIndex", "Res/IndexBuffer.data");
         mCubeAttributeBuffer = InitBufferFromFile(L"CubeAttribute", "Res/TangentAndNormal.data");
         mDFSceneObject = InitBufferFromFile(L"DistanceFields.DFObjectData", "Res/DistanceFields.DFObjectData.data");
+        mLumenCards = InitBufferFromFile(L"Lumen.Cards", "Res/Lumen.Cards.data");
     }
     {   //ClearCardBuffer
         const D3D12_RECT scissors[] = {
@@ -2175,6 +2287,20 @@ void LumenApp::BuildBuffers()
                 DXGI_FORMAT_R32G32B32A32_UINT, DXGI_FORMAT_R32G32B32A32_UINT,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, castableFormats, _countof(castableFormats));
             mLumenSceneEmissive->mResource->SetName(L"Lumen.SceneEmissive");
+        }
+        //lumen scene lighting
+        {
+            //direct lighting
+            mLumenSceneDirectLighting = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenSceneDirectLighting->mResource->SetName(L"Lumen.SceneDirectLighting");
+            mLumenSceneFinalLighting = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenSceneFinalLighting->mResource->SetName(L"Lumen.SceneFinalLighting");
         }
     }
 }

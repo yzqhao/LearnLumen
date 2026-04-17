@@ -65,6 +65,7 @@ private:
     D3DResource* mCubeIndexBuffer;
     D3DResource* mCubeAttributeBuffer;
     D3DResource* mDFSceneObject;
+    D3DResource* mLumenCards;
     D3DResource* mClearCardBuffer;
     D3DResource* mRectDataBuffer;
     D3DResource* mRectUVBuffer;
@@ -86,6 +87,8 @@ private:
     D3DImage* mLumenSceneOpacity;
     D3DImage* mLumenSceneNormal;
     D3DImage* mLumenSceneEmissive;
+    D3DImage* mLumenSceneDirectLighting;
+    D3DImage* mLumenSceneFinalLighting;
 
     
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mPosOnlyInputLayout;
