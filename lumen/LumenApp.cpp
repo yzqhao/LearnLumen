@@ -430,7 +430,7 @@ void LumenApp::Draw(const GameTimer& gt)
     {   //MeshCardCapturePass
         auto ExecuteMeshCardCapturePass = [&](int inIndex) {
             SCOPED_EVENT(mCommandList, L"MeshCardCapturePass");
-            mObjectCB->CopyData(0, mGlobalConstants);   // ����const buffer
+            mObjectCB->CopyData(0, mGlobalConstants);
 
             D3D12_RESOURCE_BARRIER barriers[4];
             barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -587,216 +587,219 @@ void LumenApp::Draw(const GameTimer& gt)
         mMisc.misc[3] = 0;//model matrix
         ExecuteMeshCardCapturePass(11);
     }
-    {   //CopyToSurfaceCacheDepth
-        SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheDepth");
+    {
+        SCOPED_EVENT(mCommandList, L"Copy to Surface Caches");
+        {   //CopyToSurfaceCacheDepth
+            SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheDepth");
 
-        D3D12_RESOURCE_BARRIER barriers[3];
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        barriers[2] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            D3D12_RESOURCE_BARRIER barriers[3];
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            barriers[2] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-        //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
-        mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
+            D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
+            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+            mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
 
-        D3D12_RECT scissor = { 0,0,4096,4096 };
-        D3D12_VIEWPORT viewport = {
-            0.0f,0.0f,4096,4096,0.0f,1.0f
-        };
+            D3D12_RECT scissor = { 0,0,4096,4096 };
+            D3D12_VIEWPORT viewport = {
+                0.0f,0.0f,4096,4096,0.0f,1.0f
+            };
 
-        mCommandList->SetGraphicsRootSignature(mRootSignatures["CopyToSurfaceCacheDepth"]);
-        mCommandList->SetPipelineState(mPSOs["CopyToSurfaceCacheDepth"]);
+            mCommandList->SetGraphicsRootSignature(mRootSignatures["CopyToSurfaceCacheDepth"]);
+            mCommandList->SetPipelineState(mPSOs["CopyToSurfaceCacheDepth"]);
 
-        mCommandList->RSSetViewports(1, &viewport);
-        mCommandList->RSSetScissorRects(1, &scissor);
-        float clearColor[] = { 1.0f,0.0f,0.0f,1.0f };
-        mCommandList->ClearRenderTargetView(colorRT[0],
-            clearColor, 0, nullptr);
+            mCommandList->RSSetViewports(1, &viewport);
+            mCommandList->RSSetScissorRects(1, &scissor);
+            float clearColor[] = { 1.0f,0.0f,0.0f,1.0f };
+            mCommandList->ClearRenderTargetView(colorRT[0],
+                clearColor, 0, nullptr);
 
-        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        mCommandList->OMSetBlendFactor(blendFactor);
-        mCommandList->OMSetStencilRef(0x84);
+            const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mCommandList->OMSetBlendFactor(blendFactor);
+            mCommandList->OMSetStencilRef(0x84);
 
-        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
-        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
-        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenCardCaptureDSAtlasSRV"]);
+            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+            mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
+            mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenCardCaptureDSAtlasSRV"]);
 
-        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        mCommandList->DrawInstanced(6, 12, 0, 0);
+            mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            mCommandList->DrawInstanced(6, 12, 0, 0);
 
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[2] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
-    }
-    {   //CompressToSurfaceCacheAlbedo
-        SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheAlbedo");
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[2] = InitResourceBarrier(mLumenSceneDepth->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        }
+        {   //CompressToSurfaceCacheAlbedo
+            SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheAlbedo");
 
-        D3D12_RESOURCE_BARRIER barriers[2];
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            D3D12_RESOURCE_BARRIER barriers[2];
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-        //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-        //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
-        mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
+            //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
+            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+            mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
 
-        D3D12_RECT scissor = { 0,0,1024,1024 };
-        D3D12_VIEWPORT viewport = {
-            0.0f,0.0f,1024,1024,0.0f,1.0f
-        };
+            D3D12_RECT scissor = { 0,0,1024,1024 };
+            D3D12_VIEWPORT viewport = {
+                0.0f,0.0f,1024,1024,0.0f,1.0f
+            };
 
-        mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
-        mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheAlbedo"]);
+            mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
+            mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheAlbedo"]);
 
-        mCommandList->RSSetViewports(1, &viewport);
-        mCommandList->RSSetScissorRects(1, &scissor);
+            mCommandList->RSSetViewports(1, &viewport);
+            mCommandList->RSSetScissorRects(1, &scissor);
 
-        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        mCommandList->OMSetBlendFactor(blendFactor);
-        mCommandList->OMSetStencilRef(0x84);
+            const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mCommandList->OMSetBlendFactor(blendFactor);
+            mCommandList->OMSetStencilRef(0x84);
 
-        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
-        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureAlbedoAtlasSRV"]);
-        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneAlbedoUAV"]);
+            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+            mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureAlbedoAtlasSRV"]);
+            mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneAlbedoUAV"]);
 
-        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        mCommandList->DrawInstanced(6, 12, 0, 0);
+            mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            mCommandList->DrawInstanced(6, 12, 0, 0);
 
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
-    }
-    {   //CopyToSurfaceCacheOpacity
-        SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheOpacity");
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        }
+        {   //CopyToSurfaceCacheOpacity
+            SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheOpacity");
 
-        D3D12_RESOURCE_BARRIER barriers[2];
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            D3D12_RESOURCE_BARRIER barriers[2];
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneOpacityRTV"] };
-        mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
-        float clearColor[] = { 1.0f,0.0f,0.0f,1.0f };
-        mCommandList->ClearRenderTargetView(colorRT[0],
-            clearColor, 0, nullptr);
+            D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneOpacityRTV"] };
+            mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
+            float clearColor[] = { 1.0f,0.0f,0.0f,1.0f };
+            mCommandList->ClearRenderTargetView(colorRT[0],
+                clearColor, 0, nullptr);
 
-        D3D12_RECT scissor = { 0,0,4096,4096 };
-        D3D12_VIEWPORT viewport = {
-            0.0f,0.0f,4096,4096,0.0f,1.0f
-        };
+            D3D12_RECT scissor = { 0,0,4096,4096 };
+            D3D12_VIEWPORT viewport = {
+                0.0f,0.0f,4096,4096,0.0f,1.0f
+            };
 
-        mCommandList->SetGraphicsRootSignature(mRootSignatures["CopyToSurfaceCacheOpacity"]);
-        mCommandList->SetPipelineState(mPSOs["CopyToSurfaceCacheOpacity"]);
+            mCommandList->SetGraphicsRootSignature(mRootSignatures["CopyToSurfaceCacheOpacity"]);
+            mCommandList->SetPipelineState(mPSOs["CopyToSurfaceCacheOpacity"]);
 
-        mCommandList->RSSetViewports(1, &viewport);
-        mCommandList->RSSetScissorRects(1, &scissor);
+            mCommandList->RSSetViewports(1, &viewport);
+            mCommandList->RSSetScissorRects(1, &scissor);
 
-        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        mCommandList->OMSetBlendFactor(blendFactor);
-        mCommandList->OMSetStencilRef(0x84);
+            const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mCommandList->OMSetBlendFactor(blendFactor);
+            mCommandList->OMSetStencilRef(0x84);
 
-        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
-        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureAlbedoAtlasSRV"]);
+            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+            mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureAlbedoAtlasSRV"]);
 
-        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        mCommandList->DrawInstanced(6, 12, 0, 0);
+            mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            mCommandList->DrawInstanced(6, 12, 0, 0);
 
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
-    }
-    {   //CompressToSurfaceCacheNormal
-        SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheNormal");
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        }
+        {   //CompressToSurfaceCacheNormal
+            SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheNormal");
 
-        D3D12_RESOURCE_BARRIER barriers[2];
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            D3D12_RESOURCE_BARRIER barriers[2];
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-        //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-        //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
-        mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
+            //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
+            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+            mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
 
-        D3D12_RECT scissor = { 0,0,1024,1024 };
-        D3D12_VIEWPORT viewport = {
-            0.0f,0.0f,1024,1024,0.0f,1.0f
-        };
+            D3D12_RECT scissor = { 0,0,1024,1024 };
+            D3D12_VIEWPORT viewport = {
+                0.0f,0.0f,1024,1024,0.0f,1.0f
+            };
 
-        mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
-        mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheNormal"]);
+            mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
+            mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheNormal"]);
 
-        mCommandList->RSSetViewports(1, &viewport);
-        mCommandList->RSSetScissorRects(1, &scissor);
+            mCommandList->RSSetViewports(1, &viewport);
+            mCommandList->RSSetScissorRects(1, &scissor);
 
-        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        mCommandList->OMSetBlendFactor(blendFactor);
-        mCommandList->OMSetStencilRef(0x84);
+            const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mCommandList->OMSetBlendFactor(blendFactor);
+            mCommandList->OMSetStencilRef(0x84);
 
-        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
-        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
-        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneNormalUAV"]);
+            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+            mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
+            mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneNormalUAV"]);
 
-        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        mCommandList->DrawInstanced(6, 12, 0, 0);
+            mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            mCommandList->DrawInstanced(6, 12, 0, 0);
 
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
-    }
-    {   //CompressToSurfaceCacheEmissive
-        SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheEmissive");
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        }
+        {   //CompressToSurfaceCacheEmissive
+            SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheEmissive");
 
-        D3D12_RESOURCE_BARRIER barriers[2];
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            D3D12_RESOURCE_BARRIER barriers[2];
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-        //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-        //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
-        mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
+            //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
+            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
+            mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
 
-        D3D12_RECT scissor = { 0,0,1024,1024 };
-        D3D12_VIEWPORT viewport = {
-            0.0f,0.0f,1024,1024,0.0f,1.0f
-        };
+            D3D12_RECT scissor = { 0,0,1024,1024 };
+            D3D12_VIEWPORT viewport = {
+                0.0f,0.0f,1024,1024,0.0f,1.0f
+            };
 
-        mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
-        mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheEmissive"]);
+            mCommandList->SetGraphicsRootSignature(mRootSignatures["CompressToSurfaceCacheAlbedo"]);
+            mCommandList->SetPipelineState(mPSOs["CompressToSurfaceCacheEmissive"]);
 
-        mCommandList->RSSetViewports(1, &viewport);
-        mCommandList->RSSetScissorRects(1, &scissor);
+            mCommandList->RSSetViewports(1, &viewport);
+            mCommandList->RSSetScissorRects(1, &scissor);
 
-        const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        mCommandList->OMSetBlendFactor(blendFactor);
-        mCommandList->OMSetStencilRef(0x84);
+            const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+            mCommandList->OMSetBlendFactor(blendFactor);
+            mCommandList->OMSetStencilRef(0x84);
 
-        //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-        //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
-        mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
-        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureEmissiveAtlasSRV"]);
-        mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneEmissiveUAV"]);
+            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
+            mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mResource->GetGPUVirtualAddress());
+            mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureEmissiveAtlasSRV"]);
+            mCommandList->SetGraphicsRootDescriptorTable(3, mGPUViews["LumenSceneEmissiveUAV"]);
 
-        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        mCommandList->DrawInstanced(6, 12, 0, 0);
+            mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            mCommandList->DrawInstanced(6, 12, 0, 0);
 
-        barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        }
     }
     {   // BasePass
         SCOPED_EVENT(mCommandList, L"BasePass");

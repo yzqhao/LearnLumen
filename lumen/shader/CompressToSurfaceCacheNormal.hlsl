@@ -45,7 +45,11 @@ void VS(
 	OutRectIndex = InstanceId;
 }
 //(0.0f,0.0f,1.0f) => (0.3,0.4,0.4) => 0.3*0.3+0.4*0.4+0.4*0.4 != 1.0
-SamplerState D3DStaticPointClampedSampler : register(s0);
+SamplerState gsamPointWrap : register(s0);
+SamplerState gsamPointClamp : register(s1);
+SamplerState gsamLinearWrap : register(s2);
+SamplerState gsamLinearClamp : register(s3);
+SamplerState gsamAnisotropicWrap : register(s4);
 void ReadBlockXY(Texture2D<float4> SourceTexture, SamplerState TextureSampler, float2 UV, float2 TexelUVSize, out float BlockX[16], out float BlockY[16])
 {
 	{
@@ -183,7 +187,7 @@ void PS(
 		{
 			float BlockTexelsX[16];
 			float BlockTexelsY[16];
-			ReadBlockXY(SourceNormalAtlas,  D3DStaticPointClampedSampler, AtlasUV - OneOverSourceAtlasSize, OneOverSourceAtlasSize, BlockTexelsX, BlockTexelsY);
+			ReadBlockXY(SourceNormalAtlas,  gsamPointClamp, AtlasUV - OneOverSourceAtlasSize, OneOverSourceAtlasSize, BlockTexelsX, BlockTexelsY);
 			RWAtlasBlock4[WriteCoord] = CompressBC5Block(BlockTexelsX, BlockTexelsY);
 		}
 	}

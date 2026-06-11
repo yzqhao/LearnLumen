@@ -45,7 +45,11 @@ void VS(
 	OutRectIndex = InstanceId;
 }
 //(0.0f,0.0f,1.0f) => (0.3,0.4,0.4) => 0.3*0.3+0.4*0.4+0.4*0.4 != 1.0
-SamplerState D3DStaticPointClampedSampler : register(s0);
+SamplerState gsamPointWrap : register(s0);
+SamplerState gsamPointClamp : register(s1);
+SamplerState gsamLinearWrap : register(s2);
+SamplerState gsamLinearClamp : register(s3);
+SamplerState gsamAnisotropicWrap : register(s4);
 float4 Texture2DSampleLevel(Texture2D Tex, SamplerState Sampler, float2 UV, float Mip)
 {
 	return Tex.SampleLevel(Sampler, UV, Mip);
@@ -67,8 +71,8 @@ void PS(
 	uint2 WriteCoord = (uint2) Position.xy;
 	{
 		{
-			bool bValidPixel = Texture2DSampleLevel(SourceNormalAtlas,  D3DStaticPointClampedSampler, AtlasUV, 0).w > 0.5f;
-			float Depth = 1.0f - Texture2DSampleLevel(SourceDepthAtlas,  D3DStaticPointClampedSampler, AtlasUV, 0).x;
+			bool bValidPixel = Texture2DSampleLevel(SourceNormalAtlas,  gsamPointClamp, AtlasUV, 0).w > 0.5f;
+			float Depth = 1.0f - Texture2DSampleLevel(SourceDepthAtlas,  gsamPointClamp, AtlasUV, 0).x;
 			OutColor0 = float4(EncodeSurfaceCacheDepth(Depth, bValidPixel), 0.0f, 0.0f, 0.0f);
 		}
 	}

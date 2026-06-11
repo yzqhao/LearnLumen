@@ -20,7 +20,7 @@ void VS(
 	in uint VertexId : SV_VertexID, //0~5
 	out float4 OutPosition : SV_POSITION)
 {
-    float2 InvViewSize = float2(0.0019531f, 0.0019531f);
+    float2 InvViewSize = float2(0.0019531f, 0.0019531f);    //0.0019531f = 1 / 512
     uint RectCoord0 = RectCoordBuffer.Load(InstanceId * 16u);
     uint RectCoord1 = RectCoordBuffer.Load(InstanceId * 16u + 4);
     uint RectCoord2 = RectCoordBuffer.Load(InstanceId * 16u + 8);
@@ -39,6 +39,6 @@ void PS(
 { //emissive
 
     outRT0 = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    outRT1 = float4(0.5f, 0.5f, 0.0f, 0.0f);
+    outRT1 = float4(0.5f, 0.5f, 0.0f, 0.0f);    //法线归一化到[0-1]，默认朝向没有偏移，归一化后正好是0.5
     outRT2 = float4(0.0f, 0.0f, 0.0f, 0.0f);
 }

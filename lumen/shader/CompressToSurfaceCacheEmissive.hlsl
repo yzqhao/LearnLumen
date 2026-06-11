@@ -45,7 +45,11 @@ void VS(
 	OutRectIndex = InstanceId;
 }
 //(0.0f,0.0f,1.0f) => (0.3,0.4,0.4) => 0.3*0.3+0.4*0.4+0.4*0.4 != 1.0
-SamplerState D3DStaticPointClampedSampler : register(s0);
+SamplerState gsamPointWrap : register(s0);
+SamplerState gsamPointClamp : register(s1);
+SamplerState gsamLinearWrap : register(s2);
+SamplerState gsamLinearClamp : register(s3);
+SamplerState gsamAnisotropicWrap : register(s4);
 void Swap(inout uint A, inout uint B) { uint Temp = A; A = B; B = Temp; }
 void Swap(inout uint2 A, inout uint2 B) { uint2 Temp = A; A = B; B = Temp; }
 void Swap(inout uint3 A, inout uint3 B) { uint3 Temp = A; A = B; B = Temp; }
@@ -176,7 +180,7 @@ void PS(
 	{
 		{
 			float3 BlockTexels[16];
-			ReadBlockRGB(SourceEmissiveAtlas,  D3DStaticPointClampedSampler, AtlasUV - OneOverSourceAtlasSize, OneOverSourceAtlasSize, BlockTexels);
+			ReadBlockRGB(SourceEmissiveAtlas,  gsamPointClamp, AtlasUV - OneOverSourceAtlasSize, OneOverSourceAtlasSize, BlockTexels);
 			RWAtlasBlock4[WriteCoord] = CompressBC6HBlock(BlockTexels);
 		}
 	}
