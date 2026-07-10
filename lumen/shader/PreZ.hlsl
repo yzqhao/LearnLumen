@@ -1,15 +1,4 @@
-cbuffer GlobalConstants : register(b0)
-{
-    float4x4 mProjectionMatrix;
-    float4x4 mViewMatrix;
-    float4x4 mWorldToClipMatrix;
-    float4 mCameraPositionHighWS;
-    float4 mCameraPositionLowWS;
-    float4 mViewDirectionWS;
-    float4 mViewRightWS;
-    float4 mViewUpWS;
-    float4x4 mModelMatrices[2];
-}
+#include "GlobalConstant.hlsli"
 
 float4 VS(in float3 inPositionMS : POSITION, in uint inInstanceID : SV_INSTANCEID) : SV_POSITION
 {

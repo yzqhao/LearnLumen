@@ -15,6 +15,12 @@
     <Filter Include="lumen">
       <UniqueIdentifier>{353237b8-ef9d-47ad-b8aa-fcbca9558024}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\UpdateSurfaceCache">
+      <UniqueIdentifier>{edfadf08-8845-4aed-8523-e15aaf3e30e2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\LumenSceneLighting">
+      <UniqueIdentifier>{dd725fe4-ebf6-4723-b5df-7977dd96eff9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -63,29 +69,29 @@
     <FxCompile Include="lumen\shader\DirectionalLighting.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\MeshCardCapture.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\ClearCardCapture.hlsl">
+      <Filter>Resource Files\UpdateSurfaceCache</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\ClearCardCapture.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CompressToSurfaceCacheAlbedo.hlsl">
+      <Filter>Resource Files\UpdateSurfaceCache</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CopyToSurfaceCacheDepth.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CompressToSurfaceCacheEmissive.hlsl">
+      <Filter>Resource Files\UpdateSurfaceCache</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CompressToSurfaceCacheAlbedo.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CompressToSurfaceCacheNormal.hlsl">
+      <Filter>Resource Files\UpdateSurfaceCache</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CompressToSurfaceCacheEmissive.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CopyToSurfaceCacheDepth.hlsl">
+      <Filter>Resource Files\UpdateSurfaceCache</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CompressToSurfaceCacheNormal.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CopyToSurfaceCacheOpacity.hlsl">
+      <Filter>Resource Files\UpdateSurfaceCache</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CopyToSurfaceCacheOpacity.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\MeshCardCapture.hlsl">
+      <Filter>Resource Files\UpdateSurfaceCache</Filter>
     </FxCompile>
-    <FxCompile Include="lumen\shader\DirectLighting.hlsl">
-      <Filter>Resource Files</Filter>
+    <FxCompile Include="lumen\shader\LumenSceneLighting\DirectLighting.hlsl">
+      <Filter>Resource Files\LumenSceneLighting</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>

@@ -296,6 +296,63 @@ void LumenApp::InitScene()
         0.0f,0.0f,1.0f,1.0f
     };
     memcpy(mGlobalConstants.mProjectionMatrixMeshCardCapture + 16, &projectionMatrixMeshCardCapture1, sizeof(projectionMatrixMeshCardCapture1));
+
+    mGlobalConstants.View_NumGlobalSDFClipmaps[0] = 4;
+    mGlobalConstants.View_GlobalVolumeTexelSize[0] = 0.003968f;// 0.00397f;
+    mGlobalConstants.View_GlobalDistanceFieldMipFactor[0] = 4.0f;
+    mGlobalConstants.View_GlobalDistanceFieldMipTransition[0] = 0.625f;
+    mGlobalConstants.View_NotCoveredExpandSurfaceScale[0] = 0.6f;
+    mGlobalConstants.View_CoveredExpandSurfaceScale[0] = 1.0f;
+    mGlobalConstants.View_DitheredTransparencyTraceThreshold[0] = 0.9f;
+    mGlobalConstants.View_DitheredTransparencyStepThreshold[0] = 0.5f;
+    mGlobalConstants.View_NotCoveredMinStepScale[0] = 4.0f;
+    mGlobalConstants.View_GlobalDistanceFieldClipmapSizeInPages[0] = 36;
+    mGlobalConstants.View_GlobalDistanceFieldInvPageAtlasSize[0] = 0.000977f;//0.00098f;
+    mGlobalConstants.View_GlobalDistanceFieldInvPageAtlasSize[1] = 0.000977f;//0.00098f;
+    mGlobalConstants.View_GlobalDistanceFieldInvPageAtlasSize[2] = 0.017857f;// 0.01786f;
+
+    mGlobalConstants.View_GlobalDistanceFieldInvCoverageAtlasSize[0] = 0.001953f;//0.00195f;
+    mGlobalConstants.View_GlobalDistanceFieldInvCoverageAtlasSize[1] = 0.001953f;//0.00195f;
+    mGlobalConstants.View_GlobalDistanceFieldInvCoverageAtlasSize[2] = 0.035714f; //0.03571f;
+
+    float View_GlobalVolumeTranslatedCenterAndExtent[] = {
+        51.34113, -0.12544, -58.78236, 2500.00,
+        51.34113, -0.12544, -58.78236, 5000.00,
+        51.34113, 277.65234, 218.99541, 10000.00,
+        51.34113, -277.9032, -336.56012, 20000.00,
+        0.00, 0.00, 0.00, 1.00,
+        0.00, 0.00, 0.00, 1.00
+    };
+    memcpy(mGlobalConstants.View_GlobalVolumeTranslatedCenterAndExtent, View_GlobalVolumeTranslatedCenterAndExtent, sizeof(View_GlobalVolumeTranslatedCenterAndExtent));
+    float View_GlobalVolumeTranslatedWorldToUVAddAndMul[] = {
+        0.48973, 0.50003, 0.51176, 0.0002,
+        0.49487, 0.50001, 0.50588, 0.0001,
+        0.49743, 0.48612, 0.48905, 0.00005,
+        0.49872, 0.50695, 0.50841, 0.00002,
+        0.00, 0.00, 0.00, 1.00,
+        0.00, 0.00, 0.00, 1.00
+    };
+    memcpy(mGlobalConstants.View_GlobalVolumeTranslatedWorldToUVAddAndMul, View_GlobalVolumeTranslatedWorldToUVAddAndMul, sizeof(View_GlobalVolumeTranslatedWorldToUVAddAndMul));
+    float View_GlobalDistanceFieldMipTranslatedWorldToUVScale[] = {
+        0.0002, 0.0002, 0.00005, 0.00198,
+        0.0001, 0.0001, 0.00002, 0.25198,
+        0.00005, 0.00005, 0.00001, 0.50198,
+        0.00002, 0.00002, 6.25000E-06, 0.75198,
+        0.00, 0.00, 0.00, 1.00,
+        0.00, 0.00, 0.00, 1.00
+    };
+    memcpy(mGlobalConstants.View_GlobalDistanceFieldMipTranslatedWorldToUVScale, View_GlobalDistanceFieldMipTranslatedWorldToUVScale, sizeof(View_GlobalDistanceFieldMipTranslatedWorldToUVScale));
+
+    float View_GlobalDistanceFieldMipTranslatedWorldToUVBias[] = {
+        0.48973f, 0.50003f, 0.12794f, 0.24802f,
+        0.49487f, 0.50001f, 0.37647f, 0.49802f,
+        0.49743f, 0.48612f, 0.62226f, 0.74802f,
+        0.49872f, 0.50695f, 0.8771f, 0.99802f,
+        0.00f, 0.00f, 0.00f, 1.00f,
+        0.00f, 0.00f, 0.00f, 1.00f
+    };
+    memcpy(mGlobalConstants.View_GlobalDistanceFieldMipTranslatedWorldToUVBias, View_GlobalDistanceFieldMipTranslatedWorldToUVBias, sizeof(View_GlobalDistanceFieldMipTranslatedWorldToUVBias));
+
 }
 
 void LumenApp::OnMouseDown(WPARAM btnState, int x, int y)
@@ -322,6 +379,11 @@ void LumenApp::OnKeyboardInput(const GameTimer& gt)
 
 void LumenApp::Update(const GameTimer& gt)
 {
+    static unsigned int frameIndex = 0u;
+    {
+        mGlobalConstants.View_StateFrameIndexMod8[0] = 7;// frameIndex++ % 8;
+    }
+
     OnKeyboardInput(gt);
     mObjectCB->CopyData(0, mGlobalConstants);
 }
@@ -1035,20 +1097,22 @@ void LumenApp::BuildShadersAndInputLayout()
 	HRESULT hr = S_OK;
 
     mDxcByteCodes["PreZVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\PreZ.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["ClearCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ClearCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["ClearCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ClearCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
-    mDxcByteCodes["MeshCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\MeshCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["MeshCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\MeshCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
-    mDxcByteCodes["CopyToSurfaceCacheDepthVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheDepth.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["CopyToSurfaceCacheDepthPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheDepth.hlsl", nullptr, 0, L"PS", L"ps_6_6");
-    mDxcByteCodes["CompressToSurfaceCacheAlbedoVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheAlbedo.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["CompressToSurfaceCacheAlbedoPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheAlbedo.hlsl", nullptr, 0, L"PS", L"ps_6_6");
-    mDxcByteCodes["CompressToSurfaceCacheNormalVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheNormal.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["CompressToSurfaceCacheNormalPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheNormal.hlsl", nullptr, 0, L"PS", L"ps_6_6");
-    mDxcByteCodes["CompressToSurfaceCacheEmissiveVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheEmissive.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["CompressToSurfaceCacheEmissivePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CompressToSurfaceCacheEmissive.hlsl", nullptr, 0, L"PS", L"ps_6_6");
-    mDxcByteCodes["CopyToSurfaceCacheOpacityVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheOpacity.hlsl", nullptr, 0, L"VS", L"vs_6_6");
-    mDxcByteCodes["CopyToSurfaceCacheOpacityPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\CopyToSurfaceCacheOpacity.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+
+    mDxcByteCodes["ClearCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\ClearCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["ClearCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\ClearCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["MeshCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\MeshCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["MeshCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\MeshCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheDepthVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CopyToSurfaceCacheDepth.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheDepthPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CopyToSurfaceCacheDepth.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheAlbedoVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CompressToSurfaceCacheAlbedo.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheAlbedoPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CompressToSurfaceCacheAlbedo.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheNormalVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CompressToSurfaceCacheNormal.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheNormalPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CompressToSurfaceCacheNormal.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheEmissiveVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CompressToSurfaceCacheEmissive.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CompressToSurfaceCacheEmissivePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CompressToSurfaceCacheEmissive.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheOpacityVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CopyToSurfaceCacheOpacity.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+    mDxcByteCodes["CopyToSurfaceCacheOpacityPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\CopyToSurfaceCacheOpacity.hlsl", nullptr, 0, L"PS", L"ps_6_6");
+    
     mDxcByteCodes["BasePassVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\BasePass.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["BasePassPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\BasePass.hlsl", nullptr, 0, L"PS", L"ps_6_6");
     mDxcByteCodes["DirectionalLightingVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\DirectionalLighting.hlsl", nullptr, 0, L"VS", L"vs_6_6");
@@ -1056,7 +1120,8 @@ void LumenApp::BuildShadersAndInputLayout()
     mDxcByteCodes["ShadowMaskCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ShadowMask.hlsl", nullptr, 0, L"CS", L"cs_6_6");
     mDxcByteCodes["ToneMappingVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ToneMapping.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["ToneMappingPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ToneMapping.hlsl", nullptr, 0, L"PS", L"ps_6_6");
-    mDxcByteCodes["DirectLightingCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\DirectLighting.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+
+    mDxcByteCodes["DirectLightingCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\DirectLighting.hlsl", nullptr, 0, L"CS", L"cs_6_6");
 
 
 	mPosOnlyInputLayout =
@@ -1851,7 +1916,7 @@ void LumenApp::BuildRootSignature()
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[2];
         slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
-        slotRootParameter[1].InitAsConstants(4, 1);		// 4个32位值
+        slotRootParameter[1].InitAsConstants(4, 1);		// 4个32佝值
 
         auto staticSamplers = GetStaticSamplers();
         CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
@@ -2082,6 +2147,11 @@ void LumenApp::BuildBuffers()
         mCubeAttributeBuffer = InitBufferFromFile(L"CubeAttribute", "Res/TangentAndNormal.data");
         mDFSceneObject = InitBufferFromFile(L"DistanceFields.DFObjectData", "Res/DistanceFields.DFObjectData.data");
         mLumenCards = InitBufferFromFile(L"Lumen.Cards", "Res/Lumen.Cards.data");
+
+        mGSDFPageAtlas = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.PageAtlas.dds");
+        mGSDFCoverageAtlas = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.CoverageAtlas.dds");
+        mGSDFPageTable = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.PageTableCombinedAtlas.dds");
+        mGSDFMips = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.SDFMips.dds");
     }
     {   //ClearCardBuffer
         const D3D12_RECT scissors[] = {

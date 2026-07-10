@@ -44,31 +44,31 @@
     <FxCompile Include="lumen\shader\BasePass.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\ClearCardCapture.hlsl">
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\ClearCardCapture.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CompressToSurfaceCacheAlbedo.hlsl">
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CompressToSurfaceCacheAlbedo.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CompressToSurfaceCacheEmissive.hlsl">
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CompressToSurfaceCacheEmissive.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CompressToSurfaceCacheNormal.hlsl">
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CompressToSurfaceCacheNormal.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CopyToSurfaceCacheDepth.hlsl">
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CopyToSurfaceCacheDepth.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\CopyToSurfaceCacheOpacity.hlsl">
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\CopyToSurfaceCacheOpacity.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
     <FxCompile Include="lumen\shader\DirectionalLighting.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\DirectLighting.hlsl">
+    <FxCompile Include="lumen\shader\LumenSceneLighting\DirectLighting.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
-    <FxCompile Include="lumen\shader\MeshCardCapture.hlsl">
+    <FxCompile Include="lumen\shader\UpdateSurfaceCache\MeshCardCapture.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
     <FxCompile Include="lumen\shader\PreZ.hlsl">

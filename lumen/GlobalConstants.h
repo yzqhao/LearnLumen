@@ -21,6 +21,25 @@ struct GlobalConstants
             float mCameraPositionMeshCardCapture[48];
             float mViewMatrixMeshCardCapture[96];//+x,-x,... axis
             float mProjectionMatrixMeshCardCapture[32];
+
+            unsigned int View_StateFrameIndexMod8[4];//frame index mod 8
+            int View_NumGlobalSDFClipmaps[4];
+            float View_GlobalVolumeTranslatedCenterAndExtent[24];
+            float View_GlobalVolumeTranslatedWorldToUVAddAndMul[24];
+            float View_GlobalDistanceFieldMipTranslatedWorldToUVScale[24];
+            float View_GlobalDistanceFieldMipTranslatedWorldToUVBias[24];
+
+            float View_GlobalVolumeTexelSize[4];
+            float View_GlobalDistanceFieldMipFactor[4];//
+            float View_GlobalDistanceFieldMipTransition[4];
+            float View_NotCoveredExpandSurfaceScale[4];
+            float View_CoveredExpandSurfaceScale[4];
+            float View_DitheredTransparencyTraceThreshold[4];
+            float View_DitheredTransparencyStepThreshold[4];
+            float View_NotCoveredMinStepScale[4];
+            int View_GlobalDistanceFieldClipmapSizeInPages[4];
+            float View_GlobalDistanceFieldInvPageAtlasSize[4];
+            float View_GlobalDistanceFieldInvCoverageAtlasSize[4];
         };
         float mData[1024];
     };

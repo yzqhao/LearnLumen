@@ -1,17 +1,5 @@
-cbuffer GlobalConstants
-{
-    float4x4 mProjectionMatrix;
-    float4x4 mViewMatrix;
-    float4x4 mWorldToClipMatrix;
-    float4 mCameraPositionHighWS;
-    float4 mCameraPositionLowWS;
-    float4 mViewDirectionWS;
-    float4 mViewRightWS;
-    float4 mViewUpWS;
-    float4x4 mModelMatrices[2];
-    float4x4 mITModelMatrices[2];
-    float4x4 mScreenToTranslatedWorld;
-}
+#include "GlobalConstant.hlsli"
+
 const static float4 View_InvDeviceZToWorldZTransform = float4(0.0f, 0.0f, 0.1f, -1.00000E-08f);
 //instance => sdf 
 Texture2D SceneDepthTexture : register(t0);

@@ -70,6 +70,11 @@ private:
     D3DResource* mRectDataBuffer;
     D3DResource* mRectUVBuffer;
 
+    D3DImage* mGSDFPageAtlas;
+    D3DImage* mGSDFCoverageAtlas;
+    D3DImage* mGSDFPageTable;
+    D3DImage* mGSDFMips;
+
     D3DImage* mSceneDepthZ;
     D3DImage* mSceneColor;
     D3DImage* mGBufferA;

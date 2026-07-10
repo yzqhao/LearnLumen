@@ -1,17 +1,4 @@
-cbuffer GlobalConstants
-{
-    float4x4 mProjectionMatrix;
-    float4x4 mViewMatrix;
-    float4x4 mWorldToClipMatrix;
-    float4 mCameraPositionHighWS;
-    float4 mCameraPositionLowWS;
-    float4 mViewDirectionWS;
-    float4 mViewRightWS;
-    float4 mViewUpWS;
-    float4x4 mModelMatrices[2];
-    float4x4 mITModelMatrices[2];
-    float4x4 mScreenToTranslatedWorld;
-}
+#include "GlobalConstant.hlsli"
 
 Texture2D SceneColorTexture : register(t0);
 

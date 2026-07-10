@@ -1,5 +1,11 @@
 #include "D3DImage.h"
 
+D3DImage* D3DImage::InitTextureFromFile(LPCTSTR inImagePath)
+{
+    //ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice, mCommandList, texMap->Filename.c_str(), texMap->Resource, texMap->UploadHeap));
+    return nullptr;
+}
+
 D3DImage* D3DImage::FileImageToUAVImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList)
 {
     D3D12_RESOURCE_DESC resourceDesc = mResource->GetDesc();
