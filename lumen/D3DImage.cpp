@@ -8,7 +8,7 @@ D3DImage* D3DImage::InitTextureFromFile(LPCTSTR inImagePath)
 
 D3DImage* D3DImage::FileImageToUAVImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList)
 {
-    D3D12_RESOURCE_DESC resourceDesc = mResource->GetDesc();
+    D3D12_RESOURCE_DESC resourceDesc = mUnderlyingResource->GetDesc();
     resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     D3D12_HEAP_PROPERTIES d3dHeapProperties = {};
     d3dHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -23,7 +23,7 @@ D3DImage* D3DImage::FileImageToUAVImage(ID3D12Device* d3dDevice, ID3D12GraphicsC
     );
     if (hResult == S_OK) {
         D3DImage* image = new D3DImage();
-        image->mResource = resource;
+        image->mUnderlyingResource = resource;
         image->mFormat = mFormat;
         image->mSRVFormat = mSRVFormat;
         image->mRTVFormat = mRTVFormat;
@@ -31,15 +31,15 @@ D3DImage* D3DImage::FileImageToUAVImage(ID3D12Device* d3dDevice, ID3D12GraphicsC
         image->mClearValue = {};
         {
             std::vector<D3D12_RESOURCE_BARRIER> barriers;
-            barriers.push_back(InitResourceBarrier(mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE));
+            barriers.push_back(InitResourceBarrier(mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE));
             cmdList->ResourceBarrier(barriers.size(), barriers.data());
         }
         {
-            cmdList->CopyResource(image->mResource, mResource);
+            cmdList->CopyResource(image->mUnderlyingResource, mUnderlyingResource);
         }
         {
             std::vector<D3D12_RESOURCE_BARRIER> barriers;
-            barriers.push_back(InitResourceBarrier(image->mResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ));
+            barriers.push_back(InitResourceBarrier(image->mUnderlyingResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ));
             cmdList->ResourceBarrier(barriers.size(), barriers.data());
         }
         return image;
@@ -77,7 +77,7 @@ D3DImage* Init2DRTImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdL
         throw std::runtime_error("Init2DRTImage Failed");
     }
     D3DImage* image = new D3DImage(true);
-    image->mResource = resource;
+    image->mUnderlyingResource = resource;
     image->mFormat = inFormat;
     image->mSRVFormat = inSRVFormat;
     image->mRTVFormat = inRTFormat;
@@ -125,7 +125,7 @@ D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, UINT64 inWidth, UINT64 inHei
         throw std::runtime_error("Init2DRTImage Failed");
     }
     D3DImage* image = new D3DImage(true);
-    image->mResource = resource;
+    image->mUnderlyingResource = resource;
     image->mFormat = inFormat;
     image->mSRVFormat = inSRVFormat;
     image->mRTVFormat = inRTFormat;

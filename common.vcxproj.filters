@@ -98,6 +98,9 @@
       <Filter>math</Filter>
     </ClCompile>
     <ClCompile Include="common\d3dDxcCompile.cpp" />
+    <ClCompile Include="common\D3DResource.cpp">
+      <Filter>common</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="UploadBuffer.h">
@@ -209,6 +212,9 @@
       <Filter>common</Filter>
     </ClInclude>
     <ClInclude Include="common\Macros.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\D3DResource.h">
       <Filter>common</Filter>
     </ClInclude>
   </ItemGroup>

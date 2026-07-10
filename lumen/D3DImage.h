@@ -32,7 +32,6 @@ struct D3DImage :public D3DResource
     }
     D3DImage* FileImageToUAVImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList);
     static D3DImage* InitTextureFromFile(LPCTSTR inImagePath);
-    static D3DImage* InitD32S8FromFile(LPCTSTR inImagePath);
 };
 
 D3DImage* Init2DRTImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList, UINT64 inWidth, UINT64 inHeight, UINT64 inAlignment, DXGI_FORMAT inFormat, DXGI_FORMAT inSRVFormat,

@@ -21,6 +21,7 @@
 #include <sstream>
 #include <cassert>
 #include "d3dx12.h"
+#include "D3DResource.h"
 #include "DDSTextureLoader.h"
 #include "DirectXShaderCompiler/inc/dxcapi.h"
 
@@ -61,14 +62,6 @@ inline std::wstring AnsiToWString(const std::string& str)
     MultiByteToWideChar(CP_ACP, 0, str.c_str(), -1, buffer, 512);
     return std::wstring(buffer);
 }
-
-struct D3DResource
-{
-    ID3D12Resource* mResource;
-    D3D12_RESOURCE_STATES mState;
-    D3DResource(D3D12_RESOURCE_STATES inState = D3D12_RESOURCE_STATE_COMMON) :mResource(nullptr), mState(inState) {}
-    void OnChangeToState(D3D12_RESOURCE_STATES inState) { mState = inState; }
-};
 
 struct MeshGeometry
 {
