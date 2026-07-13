@@ -4,6 +4,8 @@
 
 using namespace Math;
 
+#define _4MB 4194304
+
 static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers()
 {
     // Applications usually only need a handful of samplers.  So just define them all up front
@@ -1050,6 +1052,88 @@ void LumenApp::Draw(const GameTimer& gt)
         }
         {   // Radiosity
             SCOPED_EVENT(mCommandList, L"Radiosity");
+            {   // LumenSceneLightingRadiosityClear
+                SCOPED_EVENT(mCommandList, L"LumenSceneLightingRadiosityClear");
+
+                BEGIN_BARRIER();
+                PUSH_BARRIER(mLumenRadiosityProbeSHRedAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                PUSH_BARRIER(mLumenRadiosityProbeSHGreenAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                PUSH_BARRIER(mLumenRadiosityProbeSHBlueAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                END_BARRIER(mCommandList);
+
+                D3D12_CPU_DESCRIPTOR_HANDLE colorRT[3] = { mCPUViews["LumenRadiosityProbeSHRedAtlasRTV"], mCPUViews["LumenRadiosityProbeSHGreenAtlasRTV"], mCPUViews["LumenRadiosityProbeSHBlueAtlasRTV"] };
+                mCommandList->OMSetRenderTargets(3, colorRT, FALSE, nullptr);
+                float clearColor[] = { 0.0f,0.0f,0.0f,1.0f };
+                mCommandList->ClearRenderTargetView(colorRT[0], clearColor, 0, nullptr);
+                mCommandList->ClearRenderTargetView(colorRT[1], clearColor, 0, nullptr);
+                mCommandList->ClearRenderTargetView(colorRT[2], clearColor, 0, nullptr);
+
+                BEGIN_BARRIER();
+                PUSH_BARRIER(mLumenRadiosityProbeSHRedAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+                PUSH_BARRIER(mLumenRadiosityProbeSHGreenAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+                PUSH_BARRIER(mLumenRadiosityProbeSHBlueAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+                END_BARRIER(mCommandList);
+            }
+            {   // DistanceFieldTracing 4x4 probes
+                SCOPED_EVENT(mCommandList, L"DistanceFieldTracing 4x4 probes");
+
+            }
+        }
+    }
+    {   // LumenSceneProbeGather
+        SCOPED_EVENT(mCommandList, L"LumenSceneProbeGather");
+        {   //  ClearScreenProbe
+            SCOPED_EVENT(mCommandList, L"ClearScreenProbe");
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mScreenProbeSceneDepth, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mScreenProbeWorldSpeed, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mScreenProbeWorldNormal, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mScreenProbeTranslatedWorldPositions[GetPingPongResourceIndexCurrentFrame()], D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mScreenTileAdapativeProbeHeader, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mScreenTileAdapativeProbeIndicies, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mAdaptiveScreenProbeData, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mNumAdaptiveScreenProbe, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mLumenScreenProbeGatherCompactedTraceTexelAllocator, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mLumenScreenProbeGatherCompactedTraceTexelData, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mLumenScreenProbeGatherLightingProbabilityDensityFunction, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
+
+            mCommandList->SetPipelineState(mPSOs["ClearScreenProbe"]);
+            mCommandList->SetComputeRootSignature(mRootSignatures["ClearScreenProbe"]);
+
+            CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+            mCommandList->SetComputeRootDescriptorTable(0, mGPUViews["ScreenProbeSceneDepthUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["ScreenProbeWorldSpeedUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(2, mGPUViews["ScreenProbeWorldNormalUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["ScreenProbeTranslatedWorldPositionsUAV0"]);
+            mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["ScreenTileAdapativeProbeHeaderUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(5, mGPUViews["ScreenTileAdapativeProbeIndiciesUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(6, mGPUViews["AdaptiveScreenProbeDataUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(7, mGPUViews["NumAdaptiveScreenProbeUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(8, mGPUViews["CompactedTraceTexelAllocatorUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(9, mGPUViews["CompactedTraceTexelDataUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(10, mGPUViews["LumenScreenProbeGatherLightingProbabilityDensityFunctionUAV"]);
+
+            mCommandList->Dispatch(120, 68, 1); //8x8
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mScreenProbeSceneDepth, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mScreenProbeWorldSpeed, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mScreenProbeWorldNormal, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mScreenProbeTranslatedWorldPositions[GetPingPongResourceIndexCurrentFrame()], D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mScreenTileAdapativeProbeHeader, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mScreenTileAdapativeProbeIndicies, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mAdaptiveScreenProbeData, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mNumAdaptiveScreenProbe, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenScreenProbeGatherCompactedTraceTexelAllocator, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenScreenProbeGatherCompactedTraceTexelData, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenScreenProbeGatherLightingProbabilityDensityFunction, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        }
+        {   //  UniformPlacementScreenProbe
+            SCOPED_EVENT(mCommandList, L"UniformPlacementScreenProbe");
+
         }
     }
     {   //ToneMap
@@ -1186,6 +1270,9 @@ void LumenApp::BuildShadersAndInputLayout()
 
     mDxcByteCodes["DirectLightingCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\DirectLighting.hlsl", nullptr, 0, L"CS", L"cs_6_6");
 
+    //LumenSceneProbeGather
+    mDxcByteCodes["ClearScreenProbeCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ScreenProbeGather\\ClearScreenProbe.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    //mDxcByteCodes["UniformPlacementScreenProbeCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ScreenProbeGather\\UniformPlacementScreenProbe.hlsl", nullptr, 0, L"CS", L"cs_6_6");
 
 	mPosOnlyInputLayout =
 	{
@@ -1587,6 +1674,17 @@ void LumenApp::BuildPSO()
         computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
         ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["DirectLighting"])));
     }
+    {   //ClearScreenProbe
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["ClearScreenProbe"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["ClearScreenProbeCS"]->GetBufferPointer()),
+            mDxcByteCodes["ClearScreenProbeCS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["ClearScreenProbe"])));
+    }
 }
 
 static void CreateTexture2DDSV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, D3DImage* inDSRT, D3D12_DSV_FLAGS inFlags=D3D12_DSV_FLAG_NONE)
@@ -1700,7 +1798,28 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDirectLighting->mUnderlyingResource, mLumenSceneDirectLighting->mRTVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneFinalLighting->mUnderlyingResource, mLumenSceneFinalLighting->mRTVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDepth->mUnderlyingResource, mLumenSceneDepth->mSRVFormat, 0);
-    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mUnderlyingResource, mLumenSceneNormal->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mUnderlyingResource, mLumenSceneNormal->mRTVFormat, 0);
+    //ScreenProbe
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeWorldSpeed->mUnderlyingResource, mScreenProbeWorldSpeed->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeWorldSpeed->mUnderlyingResource, mScreenProbeWorldSpeed->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeWorldNormal->mUnderlyingResource, mScreenProbeWorldNormal->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeWorldNormal->mUnderlyingResource, mScreenProbeWorldNormal->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeTranslatedWorldPositions[0]->mUnderlyingResource, mScreenProbeTranslatedWorldPositions[0]->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeTranslatedWorldPositions[0]->mUnderlyingResource, mScreenProbeTranslatedWorldPositions[0]->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeTranslatedWorldPositions[1]->mUnderlyingResource, mScreenProbeTranslatedWorldPositions[1]->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeTranslatedWorldPositions[1]->mUnderlyingResource, mScreenProbeTranslatedWorldPositions[1]->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenTileAdapativeProbeHeader->mUnderlyingResource, mScreenTileAdapativeProbeHeader->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenTileAdapativeProbeHeader->mUnderlyingResource, mScreenTileAdapativeProbeHeader->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenTileAdapativeProbeIndicies->mUnderlyingResource, mScreenTileAdapativeProbeIndicies->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenTileAdapativeProbeIndicies->mUnderlyingResource, mScreenTileAdapativeProbeIndicies->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenScreenProbeGatherLightingProbabilityDensityFunction->mUnderlyingResource, mLumenScreenProbeGatherLightingProbabilityDensityFunction->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenScreenProbeGatherLightingProbabilityDensityFunction->mUnderlyingResource, mLumenScreenProbeGatherLightingProbabilityDensityFunction->mRTVFormat, 0);
+    CreateRWByteAddressBufferUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mAdaptiveScreenProbeData->mUnderlyingResource, DXGI_FORMAT_R32_TYPELESS);
+    CreateRWByteAddressBufferUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mNumAdaptiveScreenProbe->mUnderlyingResource, DXGI_FORMAT_R32_TYPELESS);
+    CreateRWByteAddressBufferUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenScreenProbeGatherCompactedTraceTexelAllocator->mUnderlyingResource, DXGI_FORMAT_R32_TYPELESS);
+    CreateRWByteAddressBufferUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenScreenProbeGatherCompactedTraceTexelData->mUnderlyingResource, DXGI_FORMAT_R32_TYPELESS);
 
     mCPUViews["LightingChannelsSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["SceneColorSRV0"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1722,6 +1841,27 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenSceneFinalLightingUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneDepthSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneNormalSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    //ScreenProbe
+    mCPUViews["ScreenProbeSceneDepthSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeSceneDepthUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeWorldSpeedSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeWorldSpeedUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeWorldNormalSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeWorldNormalUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeTranslatedWorldPositionsSRV0"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeTranslatedWorldPositionsUAV0"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeTranslatedWorldPositionsSRV1"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenProbeTranslatedWorldPositionsUAV1"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenTileAdapativeProbeHeaderSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenTileAdapativeProbeHeaderUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenTileAdapativeProbeIndiciesSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["ScreenTileAdapativeProbeIndiciesUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenScreenProbeGatherLightingProbabilityDensityFunctionSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenScreenProbeGatherLightingProbabilityDensityFunctionUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["AdaptiveScreenProbeDataUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["NumAdaptiveScreenProbeUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["CompactedTraceTexelAllocatorUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["CompactedTraceTexelDataUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
     mGPUViews["LightingChannelsSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["SceneColorSRV0"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1743,6 +1883,27 @@ void LumenApp::BuildDescriptorHeaps()
     mGPUViews["LumenSceneFinalLightingUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenSceneDepthSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenSceneNormalSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    //ScreenProbe
+    mGPUViews["ScreenProbeSceneDepthSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeSceneDepthUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeWorldSpeedSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeWorldSpeedUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeWorldNormalSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeWorldNormalUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeTranslatedWorldPositionsSRV0"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeTranslatedWorldPositionsUAV0"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeTranslatedWorldPositionsSRV1"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenProbeTranslatedWorldPositionsUAV1"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenTileAdapativeProbeHeaderSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenTileAdapativeProbeHeaderUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenTileAdapativeProbeIndiciesSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["ScreenTileAdapativeProbeIndiciesUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenScreenProbeGatherLightingProbabilityDensityFunctionSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenScreenProbeGatherLightingProbabilityDensityFunctionUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["AdaptiveScreenProbeDataUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["NumAdaptiveScreenProbeUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["CompactedTraceTexelAllocatorUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["CompactedTraceTexelDataUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
@@ -1765,6 +1926,9 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneFinalLighting->mUnderlyingResource, mLumenSceneFinalLighting->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityTraceRadianceAtlas->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenRadiosityFilteredTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityFilteredTraceRadianceAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenRadiosityProbeSHRedAtlas->mUnderlyingResource, mLumenRadiosityProbeSHRedAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenRadiosityProbeSHGreenAtlas->mUnderlyingResource, mLumenRadiosityProbeSHGreenAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenRadiosityProbeSHBlueAtlas->mUnderlyingResource, mLumenRadiosityProbeSHBlueAtlas->mRTVFormat);
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
     hCpuDescriptor.Offset(SwapChainBufferCount, mRtvDescriptorSize);
@@ -1787,6 +1951,10 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenSceneFinalLightingRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
     mCPUViews["LumenRadiosityTraceRadianceAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
     mCPUViews["LumenRadiosityFilteredTraceRadianceAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenRadiosityProbeSHRedAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenRadiosityProbeSHGreenAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenRadiosityProbeSHBlueAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    //ScreenProbe
 
     // DSV
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
@@ -2003,7 +2171,7 @@ void LumenApp::BuildRootSignature()
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[2];
         slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
-        slotRootParameter[1].InitAsConstants(4, 1);		// 4个32佝值
+        slotRootParameter[1].InitAsConstants(4, 1);		// 4?32??
 
         auto staticSamplers = GetStaticSamplers();
         CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
@@ -2206,6 +2374,95 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["DirectLighting"])));
     }
+    {   //ClearScreenProbe
+        CD3DX12_DESCRIPTOR_RANGE uavTable0;
+        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1;
+        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE uavTable2;
+        uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE uavTable3;
+        uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE uavTable4;
+        uavTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE uavTable5;
+        uavTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE uavTable6;
+        uavTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE uavTable7;
+        uavTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE uavTable8;
+        uavTable8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 8);
+        CD3DX12_DESCRIPTOR_RANGE uavTable9;
+        uavTable9.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 9);
+        CD3DX12_DESCRIPTOR_RANGE uavTable10;
+        uavTable10.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 10);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[11];
+        slotRootParameter[0].InitAsDescriptorTable(1, &uavTable0);
+        slotRootParameter[1].InitAsDescriptorTable(1, &uavTable1);
+        slotRootParameter[2].InitAsDescriptorTable(1, &uavTable2);
+        slotRootParameter[3].InitAsDescriptorTable(1, &uavTable3);
+        slotRootParameter[4].InitAsDescriptorTable(1, &uavTable4);
+        slotRootParameter[5].InitAsDescriptorTable(1, &uavTable5);
+        slotRootParameter[6].InitAsDescriptorTable(1, &uavTable6);
+        slotRootParameter[7].InitAsDescriptorTable(1, &uavTable7);
+        slotRootParameter[8].InitAsDescriptorTable(1, &uavTable8);
+        slotRootParameter[9].InitAsDescriptorTable(1, &uavTable9);
+        slotRootParameter[10].InitAsDescriptorTable(1, &uavTable10);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(11, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["ClearScreenProbe"])));
+    }
+}
+
+static D3DResource* InitBufferResource(ID3D12Device* pDevice, UINT64 inBufferSize, UINT64 inAlignment = 0llu, D3D12_RESOURCE_STATES inInitialState = D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAGS inFlags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)
+{
+    D3D12_HEAP_PROPERTIES d3dHeapProperties = {};
+    d3dHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;//gpu
+    D3D12_RESOURCE_DESC d3d12ResourceDesc = {};
+    d3d12ResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    d3d12ResourceDesc.Alignment = inAlignment;
+    d3d12ResourceDesc.Width = inBufferSize;
+    d3d12ResourceDesc.Height = 1;
+    d3d12ResourceDesc.DepthOrArraySize = 1;
+    d3d12ResourceDesc.MipLevels = 1;
+    d3d12ResourceDesc.Format = DXGI_FORMAT_UNKNOWN;
+    d3d12ResourceDesc.SampleDesc.Count = 1;
+    d3d12ResourceDesc.SampleDesc.Quality = 0;
+    d3d12ResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    d3d12ResourceDesc.Flags = inFlags;
+
+    ID3D12Resource* bufferObject = nullptr;
+    HRESULT hResult = pDevice->CreateCommittedResource(
+        &d3dHeapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &d3d12ResourceDesc,
+        inInitialState,
+        nullptr,
+        IID_PPV_ARGS(&bufferObject)
+    );
+    D3DResource* resource = new D3DResource(inInitialState);
+    resource->mUnderlyingResource = bufferObject;
+    return resource;
 }
 
 D3DResource* LumenApp::InitBufferFromFile(const wchar_t* resname, const char* file)
@@ -2482,15 +2739,73 @@ void LumenApp::BuildBuffers()
                 { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
             mLumenSceneFinalLighting->mUnderlyingResource->SetName(L"Lumen.SceneFinalLighting");
             mLumenRadiosityTraceRadianceAtlas = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
-                    DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
-                    DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-                    { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
             mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource->SetName(L"Lumen.Radiosity.TraceRadianceAtlas");
             mLumenRadiosityFilteredTraceRadianceAtlas = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
                 DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
                 DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                 { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
             mLumenRadiosityFilteredTraceRadianceAtlas->mUnderlyingResource->SetName(L"Lumen.Radiosity.FilteredTraceRadianceAtlas");
+
+            mLumenRadiosityProbeSHRedAtlas = Init2DRTImage(md3dDevice, mCommandList, 1024, 1024, 0,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadiosityProbeSHRedAtlas->mUnderlyingResource->SetName(L"Lumen.Radiosity.ProbeSHRedAtlas");
+            mLumenRadiosityProbeSHGreenAtlas = Init2DRTImage(md3dDevice, mCommandList, 1024, 1024, 0,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadiosityProbeSHGreenAtlas->mUnderlyingResource->SetName(L"Lumen.Radiosity.ProbeSHGreenAtlas");
+            mLumenRadiosityProbeSHBlueAtlas = Init2DRTImage(md3dDevice, mCommandList, 1024, 1024, 0,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadiosityProbeSHBlueAtlas->mUnderlyingResource->SetName(L"Lumen.Radiosity.ProbeSHBlueAtlas");
+
+            mLumenRadianceCacheRadianceProbeAtlasTextureSource = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadianceCacheRadianceProbeAtlasTextureSource->mUnderlyingResource->SetName(L"Lumen.RadianceCache.RadianceProbeAtlasTextureSource");
+            mLumenRadianceCacheDepthProbeAtlasTexture = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT,
+                DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16_FLOAT, {0.0f,0} });
+            mLumenRadianceCacheDepthProbeAtlasTexture->mUnderlyingResource->SetName(L"Lumen.RadianceCache.DepthProbeAtlasTexture");
+            mLumenRadianceCacheFilteredRadianceProbeAtlasTexture = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadianceCacheFilteredRadianceProbeAtlasTexture->mUnderlyingResource->SetName(L"Lumen.RadianceCache.FilteredRadianceProbeAtlasTexture");
+            mLumenRadianceCacheFinalRadianceAtlas = Init2DRTImage(md3dDevice, mCommandList, 4352, 4352, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadianceCacheFinalRadianceAtlas->mUnderlyingResource->SetName(L"Lumen.RadianceCache.FinalRadianceAtlas");
+
+            mLumenScreenProbeGatherTraceHit = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+                DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32_UINT,
+                DXGI_FORMAT_R32_UINT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R32_UINT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherTraceHit->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.TraceHit");
+            mLumenScreenProbeGatherTraceRadiance = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherTraceRadiance->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.TraceRadiance");
+            mLumenScreenProbeGatherScreenProbeHitDistance = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+                DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM,
+                DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R8_UNORM, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherScreenProbeHitDistance->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeHitDistance");
+            mLumenScreenProbeGatherScreenProbeTraceMoving = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+                DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM,
+                DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R8_UNORM, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherScreenProbeTraceMoving->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeTraceMoving");
         }
         {   //StochasticLightingDepthHistorys
             mStochasticLightingDepthHistorys[0] = Init2DRTImage(md3dDevice, mCommandList, mClientWidth, mClientHeight, 0,
@@ -2504,5 +2819,74 @@ void LumenApp::BuildBuffers()
                 { DXGI_FORMAT_R32_FLOAT, {1.0f,1.0f,1.0f,1.0f} });
             mStochasticLightingDepthHistorys[1]->mUnderlyingResource->SetName(L"StochasticLighting.DepthHistorys[1]");
         }
+    }
+    {   //probe gather
+        //960x540 -> 60 x 34 : 17 => 60 x 51
+        mScreenProbeSceneDepth = Init2DRTImage(md3dDevice, mCommandList, 60, 51, 0,
+            DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32_UINT,
+            DXGI_FORMAT_R32_UINT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R32_UINT, {0.0f,0.0f,0.0f,1.0f} });
+        mScreenProbeSceneDepth->mUnderlyingResource->SetName(L"Lumen.ScreenProbeSceneDepth");
+        mScreenProbeWorldSpeed = Init2DRTImage(md3dDevice, mCommandList, 60, 51, 0,
+            DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R16_UINT,
+            DXGI_FORMAT_R16_UINT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R16_UINT, {0.0f,0.0f,0.0f,1.0f} });
+        mScreenProbeWorldSpeed->mUnderlyingResource->SetName(L"Lumen.ScreenProbeWorldSpeed");
+        mScreenProbeWorldNormal = Init2DRTImage(md3dDevice, mCommandList, 60, 51, 0,
+            DXGI_FORMAT_R8G8_UNORM, DXGI_FORMAT_R8G8_UNORM,
+            DXGI_FORMAT_R8G8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R8G8_UNORM, {0.0f,0.0f,0.0f,1.0f} });
+        mScreenProbeWorldNormal->mUnderlyingResource->SetName(L"Lumen.ScreenProbeWorldNormal");
+        mScreenProbeTranslatedWorldPositions[0] = Init2DRTImage(md3dDevice, mCommandList, 60, 51, 0,
+            DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT,
+            DXGI_FORMAT_R32G32B32A32_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R32G32B32A32_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+        mScreenProbeTranslatedWorldPositions[0]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeTranslatedWorldPosition[0]");
+        mScreenProbeTranslatedWorldPositions[1] = Init2DRTImage(md3dDevice, mCommandList, 60, 51, 0,
+            DXGI_FORMAT_R32G32B32A32_FLOAT, DXGI_FORMAT_R32G32B32A32_FLOAT,
+            DXGI_FORMAT_R32G32B32A32_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R32G32B32A32_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+        mScreenProbeTranslatedWorldPositions[1]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeTranslatedWorldPosition[1]");
+
+        mLumenScreenProbeGatherScreenProbeRadiances[0] = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+            DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+            DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+        mLumenScreenProbeGatherScreenProbeRadiances[0]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeRadiances[0]");
+        mLumenScreenProbeGatherScreenProbeRadiances[1] = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+            DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+            DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+        mLumenScreenProbeGatherScreenProbeRadiances[1]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeRadiances[1]");
+        mScreenTileAdapativeProbeHeader = Init2DRTImage(md3dDevice, mCommandList, 60, 34, 0,
+            DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32_UINT,
+            DXGI_FORMAT_R32_UINT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R32_UINT, {0.0f,0.0f,0.0f,1.0f} });
+        mScreenTileAdapativeProbeHeader->mUnderlyingResource->SetName(L"Lumen.ScreenTileAdapativeProbeHeader");
+        mScreenTileAdapativeProbeIndicies = Init2DRTImage(md3dDevice, mCommandList, 960, 544, 0,
+            DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R16_UINT,
+            DXGI_FORMAT_R16_UINT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R16_UINT, {0.0f,0.0f,0.0f,1.0f} });
+        mScreenTileAdapativeProbeIndicies->mUnderlyingResource->SetName(L"Lumen.ScreenTileAdapativeProbeIndicies");
+
+        mAdaptiveScreenProbeData = InitBufferResource(md3dDevice, _4MB, 0);
+        mAdaptiveScreenProbeData->mUnderlyingResource->SetName(L"Lumen.AdaptiveScreenProbeData");
+        mNumAdaptiveScreenProbe = InitBufferResource(md3dDevice, 16, 0);
+        mNumAdaptiveScreenProbe->mUnderlyingResource->SetName(L"Lumen.NumAdaptiveScreenProbe");
+        mLumenScreenProbeGatherCompactedTraceTexelAllocator = InitBufferResource(md3dDevice, 8, 0);
+        mLumenScreenProbeGatherCompactedTraceTexelAllocator->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.CompactedTraceTexelAllocator");
+        mLumenScreenProbeGatherCompactedTraceTexelData = InitBufferResource(md3dDevice, _4MB, 0);
+        mLumenScreenProbeGatherCompactedTraceTexelData->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.CompactedTraceTexelData");
+
+        mLumenScreenProbeGatherLightingProbabilityDensityFunction = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+            DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT,
+            DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+        mLumenScreenProbeGatherLightingProbabilityDensityFunction->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.LightingProbabilityDensityFunction");
+
+        mLumenScreenProbeGatherCompactedTraceTexelAllocator = InitBufferResource(md3dDevice, 16, 0);
+        mLumenScreenProbeGatherCompactedTraceTexelAllocator->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.CompactedTraceTexelAllocator");
+        mLumenScreenProbeGatherCompactedTraceTexelData = InitBufferResource(md3dDevice, _4MB, 0);
+        mLumenScreenProbeGatherCompactedTraceTexelData->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.CompactedTraceTexelData");
     }
 }

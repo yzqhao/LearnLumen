@@ -100,6 +100,30 @@ private:
     D3DImage* mLumenSceneFinalLighting;
     D3DImage* mLumenRadiosityTraceRadianceAtlas;
     D3DImage* mLumenRadiosityFilteredTraceRadianceAtlas;
+    D3DImage* mLumenRadiosityProbeSHRedAtlas;
+    D3DImage* mLumenRadiosityProbeSHGreenAtlas;
+    D3DImage* mLumenRadiosityProbeSHBlueAtlas;
+    D3DImage* mLumenRadianceCacheRadianceProbeAtlasTextureSource;
+    D3DImage* mLumenRadianceCacheDepthProbeAtlasTexture;
+    D3DImage* mLumenRadianceCacheFilteredRadianceProbeAtlasTexture;
+    D3DImage* mLumenRadianceCacheFinalRadianceAtlas;
+    D3DImage* mLumenScreenProbeGatherTraceHit;
+    D3DImage* mLumenScreenProbeGatherTraceRadiance;
+    D3DImage* mLumenScreenProbeGatherScreenProbeHitDistance;
+    D3DImage* mLumenScreenProbeGatherScreenProbeTraceMoving;
+    //lumen screen space
+    D3DImage* mScreenProbeSceneDepth;
+    D3DImage* mScreenProbeWorldSpeed;
+    D3DImage* mScreenProbeWorldNormal;
+    D3DImage* mScreenProbeTranslatedWorldPositions[2];
+    D3DImage* mScreenTileAdapativeProbeHeader;
+    D3DImage* mScreenTileAdapativeProbeIndicies;
+    D3DResource* mAdaptiveScreenProbeData;
+    D3DResource* mNumAdaptiveScreenProbe;
+    D3DResource* mLumenScreenProbeGatherCompactedTraceTexelAllocator;
+    D3DResource* mLumenScreenProbeGatherCompactedTraceTexelData;
+    D3DImage* mLumenScreenProbeGatherLightingProbabilityDensityFunction;
+    D3DImage* mLumenScreenProbeGatherScreenProbeRadiances[2];
 
     D3DImage* mStochasticLightingDepthHistorys[2];//no need to clear because always full screen render every frame
 

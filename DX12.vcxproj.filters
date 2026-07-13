@@ -21,6 +21,9 @@
     <Filter Include="Resource Files\LumenSceneLighting">
       <UniqueIdentifier>{dd725fe4-ebf6-4723-b5df-7977dd96eff9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\ScreenProbeGather">
+      <UniqueIdentifier>{b7b703ec-295b-4b84-938b-6445a7cc56bd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -92,6 +95,12 @@
     </FxCompile>
     <FxCompile Include="lumen\shader\LumenSceneLighting\DirectLighting.hlsl">
       <Filter>Resource Files\LumenSceneLighting</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\ScreenProbeGather\ClearScreenProbe.hlsl">
+      <Filter>Resource Files\ScreenProbeGather</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\ScreenProbeGather\UniformPlacementScreenProbe.hlsl">
+      <Filter>Resource Files\ScreenProbeGather</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>
