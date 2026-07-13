@@ -31,12 +31,12 @@ struct D3DImage :public D3DResource
         mClearValue = {};
     }
     D3DImage* FileImageToUAVImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList);
-    static D3DImage* InitTextureFromFile(LPCTSTR inImagePath);
+    static D3DImage* InitTextureFromFile(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList, LPCTSTR inImagePath);
 };
 
 D3DImage* Init2DRTImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList, UINT64 inWidth, UINT64 inHeight, UINT64 inAlignment, DXGI_FORMAT inFormat, DXGI_FORMAT inSRVFormat,
     DXGI_FORMAT inRTFormat, D3D12_RESOURCE_FLAGS inFlags, D3D12_CLEAR_VALUE inClearValue, int inMipLevelCount = 1);
 
-D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, UINT64 inWidth, UINT64 inHeight,
+D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, ID3D12GraphicsCommandList* cmdList, UINT64 inWidth, UINT64 inHeight,
     DXGI_FORMAT inFormat, DXGI_FORMAT inSRVFormat, DXGI_FORMAT inRTFormat,
     D3D12_RESOURCE_FLAGS inFlags, DXGI_FORMAT* inCastableFormats, int inCastableFormatCount);

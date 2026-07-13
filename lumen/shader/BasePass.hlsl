@@ -22,7 +22,8 @@ void PS(
     out float4 outRT0 : SV_TARGET0,
     out float4 outRT1 : SV_TARGET1,
     out float4 outRT2 : SV_TARGET2, //unorm
-    out float4 outRT3 : SV_TARGET3)
+    out float4 outRT3 : SV_TARGET3,
+    out uint outRT4 : SV_TARGET4)
 {
     float3 normal = normalize(inNormal);
     normal = normal * 0.5 + 0.5;
@@ -35,4 +36,6 @@ void PS(
     outRT2 = float4(0.0f, 0.5f, 0.6407f, float(lastCompoent) / 255.0f);
     //base color + generic ao
     outRT3 = float4(0.9f, 0.9f, 0.9f, 1.0f);
+    //LightingChannels
+    outRT4 = 9;
 }

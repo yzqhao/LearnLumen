@@ -76,7 +76,8 @@ private:
     D3DImage* mGSDFMips;
 
     D3DImage* mSceneDepthZ;
-    D3DImage* mSceneColor;
+    D3DImage* mLightingChannels;
+    D3DImage* mSceneColors[2];
     D3DImage* mGBufferA;
     D3DImage* mGBufferB;
     D3DImage* mGBufferC;
@@ -92,8 +93,15 @@ private:
     D3DImage* mLumenSceneOpacity;
     D3DImage* mLumenSceneNormal;
     D3DImage* mLumenSceneEmissive;
+    //lumen scene lighting
     D3DImage* mLumenSceneDirectLighting;
+    D3DImage* mLumenSceneIndirectLighting;
+    D3DImage* mLumenSceneNumFramesAccumulatedAtlas;
     D3DImage* mLumenSceneFinalLighting;
+    D3DImage* mLumenRadiosityTraceRadianceAtlas;
+    D3DImage* mLumenRadiosityFilteredTraceRadianceAtlas;
+
+    D3DImage* mStochasticLightingDepthHistorys[2];//no need to clear because always full screen render every frame
 
     
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mPosOnlyInputLayout;

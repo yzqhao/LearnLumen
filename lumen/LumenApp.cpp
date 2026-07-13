@@ -4,9 +4,6 @@
 
 using namespace Math;
 
-static int sCurrentMipLevelIndex = 9;
-static unsigned int mipLevels[] = { 0,1,2,3,4,5,6,7,8,10 };
-
 static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers()
 {
     // Applications usually only need a handful of samplers.  So just define them all up front
@@ -62,6 +59,27 @@ static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers()
         pointWrap, pointClamp,
         linearWrap, linearClamp,
         anisotropicWrap, anisotropicClamp };
+}
+
+#define BEGIN_BARRIER() \
+    { \
+        std::vector<D3D12_RESOURCE_BARRIER> barriers;
+
+#define PUSH_BARRIER(RES, SRC_STATE, DST_STATE) \
+    barriers.push_back(InitResourceBarrier(RES->mUnderlyingResource, SRC_STATE, DST_STATE));
+
+#define END_BARRIER(CMD_LIST) \
+        CMD_LIST->ResourceBarrier(barriers.size(), barriers.data()); \
+        barriers.clear(); \
+    }
+
+static unsigned int sFrameIndex = 0u;
+static int sPingPongResourceIndex = 0;
+int GetPingPongResourceIndexCurrentFrame() {
+    return sPingPongResourceIndex;
+}
+int GetPingPongResourceIndexLastFrame() {
+    return (sPingPongResourceIndex + 1) % 2;
 }
 
 //
@@ -390,6 +408,10 @@ void LumenApp::Update(const GameTimer& gt)
 
 void LumenApp::Draw(const GameTimer& gt)
 {
+    {
+        sFrameIndex++;
+        sPingPongResourceIndex = sFrameIndex % 2;
+    }
 	// Reuse the memory associated with command recording.
 	// We can only reset when the associated command lists have finished execution on the GPU.
 	ThrowIfFailed(mDirectCmdListAlloc->Reset());
@@ -445,12 +467,12 @@ void LumenApp::Draw(const GameTimer& gt)
             SCOPED_EVENT(mCommandList, L"ClearCardCapturePass");
             mObjectCB->CopyData(0, mGlobalConstants);   // ����const buffer
 
-            D3D12_RESOURCE_BARRIER barriers[4];
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureAlbedoAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenCardCaptureNormalAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenCardCaptureEmissiveAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenCardCaptureDSAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+            END_BARRIER(mCommandList);
 
             D3D12_CPU_DESCRIPTOR_HANDLE colorRT[3] = { mCPUViews["LumenCardCaptureAlbedoAtlasRTV"], mCPUViews["LumenCardCaptureNormalAtlasRTV"], mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] };
             D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
@@ -479,13 +501,13 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             mCommandList->DrawInstanced(6, 12, 0, 0);
 
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[1] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[2] = InitResourceBarrier(mLumenCardCaptureEmissiveAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[3] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
-
-            };
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureAlbedoAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenCardCaptureNormalAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenCardCaptureEmissiveAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenCardCaptureDSAtlas, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        };
         SCOPED_EVENT(mCommandList, L"ClearCardPass");
         ExecuteMeshCardCapturePass();
     }
@@ -654,14 +676,13 @@ void LumenApp::Draw(const GameTimer& gt)
         {   //CopyToSurfaceCacheDepth
             SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheDepth");
 
-            D3D12_RESOURCE_BARRIER barriers[3];
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            barriers[2] = InitResourceBarrier(mLumenSceneDepth->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureNormalAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            PUSH_BARRIER(mLumenCardCaptureDSAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            PUSH_BARRIER(mLumenSceneDepth, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            END_BARRIER(mCommandList);
 
             D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
             mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
 
             D3D12_RECT scissor = { 0,0,4096,4096 };
@@ -692,21 +713,20 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             mCommandList->DrawInstanced(6, 12, 0, 0);
 
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureNormalAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[1] = InitResourceBarrier(mLumenCardCaptureDSAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[2] = InitResourceBarrier(mLumenSceneDepth->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureNormalAtlas, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenCardCaptureDSAtlas, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneDepth, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
         }
         {   //CompressToSurfaceCacheAlbedo
             SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheAlbedo");
+            
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureAlbedoAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            PUSH_BARRIER(mLumenSceneAlbedo, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
 
-            D3D12_RESOURCE_BARRIER barriers[2];
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
-
-            //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
             mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
 
             D3D12_RECT scissor = { 0,0,1024,1024 };
@@ -734,21 +754,22 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             mCommandList->DrawInstanced(6, 12, 0, 0);
 
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureAlbedoAtlas, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneAlbedo, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
         }
         {   //CopyToSurfaceCacheOpacity
             SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheOpacity");
 
-            D3D12_RESOURCE_BARRIER barriers[2];
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureAlbedoAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            PUSH_BARRIER(mLumenSceneOpacity, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            END_BARRIER(mCommandList);
 
             D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneOpacityRTV"] };
             mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
-            float clearColor[] = { 1.0f,0.0f,0.0f,1.0f };
+            float clearColor[] = { 0.0f,0.0f,0.0f,0.0f };
             mCommandList->ClearRenderTargetView(colorRT[0],
                 clearColor, 0, nullptr);
 
@@ -776,20 +797,19 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             mCommandList->DrawInstanced(6, 12, 0, 0);
 
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[1] = InitResourceBarrier(mLumenSceneOpacity->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureAlbedoAtlas, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneOpacity, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
         }
         {   //CompressToSurfaceCacheNormal
             SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheNormal");
 
-            D3D12_RESOURCE_BARRIER barriers[2];
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureNormalAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            PUSH_BARRIER(mLumenSceneNormal, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
 
-            //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
             mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
 
             D3D12_RECT scissor = { 0,0,1024,1024 };
@@ -817,20 +837,19 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             mCommandList->DrawInstanced(6, 12, 0, 0);
 
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureNormalAtlas, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneNormal, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
         }
         {   //CompressToSurfaceCacheEmissive
             SCOPED_EVENT(mCommandList, L"CompressToSurfaceCacheEmissive");
 
-            D3D12_RESOURCE_BARRIER barriers[2];
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureEmissiveAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            PUSH_BARRIER(mLumenSceneEmissive, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
 
-            //D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { mCPUViews["LumenSceneDepthRTV"] };
-            //D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mCPUViews["LumenCardCaptureDSAtlasDSV"];
             mCommandList->OMSetRenderTargets(0, nullptr, FALSE, nullptr);
 
             D3D12_RECT scissor = { 0,0,1024,1024 };
@@ -858,30 +877,36 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             mCommandList->DrawInstanced(6, 12, 0, 0);
 
-            barriers[0] = InitResourceBarrier(mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[1] = InitResourceBarrier(mLumenSceneAlbedo->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-            mCommandList->ResourceBarrier(_countof(barriers), barriers);
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenCardCaptureEmissiveAtlas, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneEmissive, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
         }
     }
     {   // BasePass
         SCOPED_EVENT(mCommandList, L"BasePass");
-        D3D12_RESOURCE_BARRIER barriers[5];
-        barriers[0] = InitResourceBarrier(mSceneColor->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        barriers[1] = InitResourceBarrier(mGBufferA->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        barriers[2] = InitResourceBarrier(mGBufferB->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        barriers[3] = InitResourceBarrier(mGBufferC->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        barriers[4] = InitResourceBarrier(mSceneDepthZ->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[4] = { mCPUViews["SceneColorRTV"], mCPUViews["GBufferARTV"], mCPUViews["GBufferBRTV"], mCPUViews["GBufferCRTV"] };
+        BEGIN_BARRIER();
+        PUSH_BARRIER(mLightingChannels, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        PUSH_BARRIER(mSceneColors[GetPingPongResourceIndexCurrentFrame()], D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        PUSH_BARRIER(mGBufferA, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        PUSH_BARRIER(mGBufferB, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        PUSH_BARRIER(mGBufferC, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        PUSH_BARRIER(mSceneDepthZ, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+        END_BARRIER(mCommandList);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[5] = { mCPUViews[GetPingPongResourceIndexCurrentFrame() == 0 ? "SceneColorRTV0" : "SceneColorRTV1"], 
+            mCPUViews["GBufferARTV"], mCPUViews["GBufferBRTV"], mCPUViews["GBufferCRTV"], mCPUViews["LightingChannelsRTV"] };
         D3D12_CPU_DESCRIPTOR_HANDLE dsRT = mDsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        mCommandList->OMSetRenderTargets(4, colorRT, FALSE, &dsRT);
+        mCommandList->OMSetRenderTargets(5, colorRT, FALSE, &dsRT);
         float clearColor[] = { 0.0f,0.0f,0.0f,1.0f };
         mCommandList->ClearRenderTargetView(colorRT[0], clearColor, 0, nullptr);
         clearColor[3] = 0.0f;
         mCommandList->ClearRenderTargetView(colorRT[1], clearColor, 0, nullptr);
         mCommandList->ClearRenderTargetView(colorRT[2], clearColor, 0, nullptr);
         mCommandList->ClearRenderTargetView(colorRT[3], clearColor, 0, nullptr);
+        float clearColor2[] = { 1.0f,1.0f,1.0f,1.0f };
+        mCommandList->ClearRenderTargetView(colorRT[4], clearColor2, 0, nullptr);
         //mCommandList->ClearDepthStencilView(dsRT, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
 
         // Set the viewport and scissor rect.  This needs to be reset whenever the command list is reset.
@@ -900,12 +925,14 @@ void LumenApp::Draw(const GameTimer& gt)
         mCommandList->IASetIndexBuffer(&mCubeGeo->IndexBufferView());
         mCommandList->DrawIndexedInstanced(mCubeGeo->IndexCount, 2, 0, 0, 0);
 
-        barriers[0] = InitResourceBarrier(mSceneColor->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[1] = InitResourceBarrier(mGBufferA->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[2] = InitResourceBarrier(mGBufferB->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[3] = InitResourceBarrier(mGBufferC->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-        barriers[4] = InitResourceBarrier(mSceneDepthZ->mUnderlyingResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
-        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        BEGIN_BARRIER();
+        PUSH_BARRIER(mLightingChannels, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        PUSH_BARRIER(mSceneColors[GetPingPongResourceIndexCurrentFrame()], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        PUSH_BARRIER(mGBufferA, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        PUSH_BARRIER(mGBufferB, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        PUSH_BARRIER(mGBufferC, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        PUSH_BARRIER(mSceneDepthZ, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        END_BARRIER(mCommandList);
     }
     {   //ShadowMask
         SCOPED_EVENT(mCommandList, L"ShadowMask");
@@ -930,10 +957,10 @@ void LumenApp::Draw(const GameTimer& gt)
     {   //DirectionalLighting
         SCOPED_EVENT(mCommandList, L"DirectionalLighting");
         D3D12_RESOURCE_BARRIER barriers[1];
-        barriers[0] = InitResourceBarrier(mSceneColor->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        barriers[0] = InitResourceBarrier(mSceneColors[GetPingPongResourceIndexCurrentFrame()]->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-        D3D12_CPU_DESCRIPTOR_HANDLE colorRT = mCPUViews["SceneColorRTV"];
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT = mCPUViews[GetPingPongResourceIndexCurrentFrame() == 0 ? "SceneColorRTV0" : "SceneColorRTV1"];
         mCommandList->OMSetRenderTargets(1, &colorRT, FALSE, nullptr);
 
         mCommandList->SetPipelineState(mPSOs["DirectionalLighting"]);
@@ -953,18 +980,51 @@ void LumenApp::Draw(const GameTimer& gt)
 
         mCommandList->DrawIndexedInstanced(mScreenFullGeo->IndexCount, 1, 0, 0, 0);
 
-        barriers[0] = InitResourceBarrier(mSceneColor->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+        barriers[0] = InitResourceBarrier(mSceneColors[GetPingPongResourceIndexCurrentFrame()]->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
     {   //LumenSceneLighting
         SCOPED_EVENT(mCommandList, L"LumenSceneLighting");
+        {   // LumenSceneLightingClear
+            SCOPED_EVENT(mCommandList, L"LumenSceneLightingClear");
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenSceneDirectLighting, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenSceneIndirectLighting, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenSceneNumFramesAccumulatedAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenSceneFinalLighting, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenRadiosityTraceRadianceAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            PUSH_BARRIER(mLumenRadiosityFilteredTraceRadianceAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            END_BARRIER(mCommandList);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE colorRT[6] = { mCPUViews["LumenSceneDirectLightingRTV"], mCPUViews["LumenSceneIndirectLightingRTV"], mCPUViews["LumenSceneNumFramesAccumulatedAtlasRTV"],
+                mCPUViews["LumenSceneFinalLightingRTV"], mCPUViews["LumenRadiosityTraceRadianceAtlasRTV"], mCPUViews["LumenRadiosityFilteredTraceRadianceAtlasRTV"] };
+            mCommandList->OMSetRenderTargets(6, colorRT, FALSE, nullptr);
+            float clearColor[] = { 0.0f,0.0f,0.0f,1.0f };
+            mCommandList->ClearRenderTargetView(colorRT[0], clearColor, 0, nullptr);
+            mCommandList->ClearRenderTargetView(colorRT[1], clearColor, 0, nullptr);
+            mCommandList->ClearRenderTargetView(colorRT[2], clearColor, 0, nullptr);
+            mCommandList->ClearRenderTargetView(colorRT[3], clearColor, 0, nullptr);
+            mCommandList->ClearRenderTargetView(colorRT[4], clearColor, 0, nullptr);
+            mCommandList->ClearRenderTargetView(colorRT[5], clearColor, 0, nullptr);
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mLumenSceneDirectLighting, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneIndirectLighting, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneNumFramesAccumulatedAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenSceneFinalLighting, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenRadiosityTraceRadianceAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mLumenRadiosityFilteredTraceRadianceAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        }
         {   //DirectLighting
             SCOPED_EVENT(mCommandList, L"DirectLighting");
-            D3D12_RESOURCE_BARRIER barriers[3];
+            D3D12_RESOURCE_BARRIER barriers[4];
+
             barriers[0] = InitResourceBarrier(mLumenSceneNormal->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             barriers[1] = InitResourceBarrier(mLumenSceneDepth->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
             barriers[2] = InitResourceBarrier(mLumenSceneDirectLighting->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-            barriers[2] = InitResourceBarrier(mLumenSceneFinalLighting->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            barriers[3] = InitResourceBarrier(mLumenSceneFinalLighting->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
             mCommandList->SetPipelineState(mPSOs["DirectLighting"]);
@@ -985,8 +1045,11 @@ void LumenApp::Draw(const GameTimer& gt)
             barriers[0] = InitResourceBarrier(mLumenSceneNormal->mUnderlyingResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
             barriers[1] = InitResourceBarrier(mLumenSceneDepth->mUnderlyingResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
             barriers[2] = InitResourceBarrier(mLumenSceneDirectLighting->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
-            barriers[2] = InitResourceBarrier(mLumenSceneFinalLighting->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            barriers[3] = InitResourceBarrier(mLumenSceneFinalLighting->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
             mCommandList->ResourceBarrier(_countof(barriers), barriers);
+        }
+        {   // Radiosity
+            SCOPED_EVENT(mCommandList, L"Radiosity");
         }
     }
     {   //ToneMap
@@ -1005,7 +1068,7 @@ void LumenApp::Draw(const GameTimer& gt)
         mCommandList->IASetIndexBuffer(&mScreenFullGeo->IndexBufferView());
         mCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-        mCommandList->SetGraphicsRootDescriptorTable(0, mGPUViews["SceneColorSRV"]);
+        mCommandList->SetGraphicsRootDescriptorTable(0, mGPUViews[GetPingPongResourceIndexCurrentFrame() == 0 ? "SceneColorSRV0" : "SceneColorSRV1"]);
 
         mCommandList->DrawIndexedInstanced(mScreenFullGeo->IndexCount, 1, 0, 0, 0);
 
@@ -1190,11 +1253,12 @@ void LumenApp::BuildPSO()
         psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
         psoDesc.SampleMask = UINT_MAX;
         psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        psoDesc.NumRenderTargets = 4;
-        psoDesc.RTVFormats[0] = mSceneColor->mRTVFormat;
+        psoDesc.NumRenderTargets = 5;
+        psoDesc.RTVFormats[0] = mSceneColors[0]->mRTVFormat;
         psoDesc.RTVFormats[1] = mGBufferA->mRTVFormat;
         psoDesc.RTVFormats[2] = mGBufferB->mRTVFormat;
         psoDesc.RTVFormats[3] = mGBufferC->mRTVFormat;
+        psoDesc.RTVFormats[4] = mLightingChannels->mRTVFormat;
         psoDesc.DSVFormat = mSceneDepthZ->mRTVFormat;
         psoDesc.SampleDesc.Count = 1;
         psoDesc.SampleDesc.Quality = 0;
@@ -1240,7 +1304,7 @@ void LumenApp::BuildPSO()
         psoDesc.SampleMask = UINT_MAX;
         psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         psoDesc.NumRenderTargets = 1;
-        psoDesc.RTVFormats[0] = mSceneColor->mRTVFormat;
+        psoDesc.RTVFormats[0] = mSceneColors[0]->mRTVFormat;
         psoDesc.SampleDesc.Count = 1;
         psoDesc.SampleDesc.Quality = 0;
         psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -1271,7 +1335,7 @@ void LumenApp::BuildPSO()
         psoDesc.SampleMask = UINT_MAX;
         psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         psoDesc.NumRenderTargets = 1;
-        psoDesc.RTVFormats[0] = mToneMap->mRTVFormat;
+        psoDesc.RTVFormats[0] = DXGI_FORMAT_R10G10B10A2_UNORM;
         psoDesc.SampleDesc.Count = 1;
         psoDesc.SampleDesc.Quality = 0;
         psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -1617,7 +1681,9 @@ void LumenApp::BuildDescriptorHeaps()
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
     CD3DX12_GPU_DESCRIPTOR_HANDLE hGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
-    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mSceneColor->mUnderlyingResource, mSceneColor->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLightingChannels->mUnderlyingResource, mLightingChannels->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mSceneColors[0]->mUnderlyingResource, mSceneColors[0]->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mSceneColors[1]->mUnderlyingResource, mSceneColors[1]->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGBufferA->mUnderlyingResource, mGBufferA->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGBufferB->mUnderlyingResource, mGBufferB->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGBufferC->mUnderlyingResource, mGBufferC->mSRVFormat, 0);
@@ -1636,7 +1702,9 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDepth->mUnderlyingResource, mLumenSceneDepth->mSRVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mUnderlyingResource, mLumenSceneNormal->mSRVFormat, 0);
 
-    mCPUViews["SceneColorSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LightingChannelsSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["SceneColorSRV0"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["SceneColorSRV1"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GBufferBSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GBufferCSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1655,7 +1723,9 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenSceneDepthSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneNormalSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
-    mGPUViews["SceneColorSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LightingChannelsSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["SceneColorSRV0"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["SceneColorSRV1"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["GBufferASRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["GBufferBSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["GBufferCSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1677,7 +1747,9 @@ void LumenApp::BuildDescriptorHeaps()
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
     hCpuDescriptor.Offset(SwapChainBufferCount, mRtvDescriptorSize);
-    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mSceneColor->mUnderlyingResource, mSceneColor->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLightingChannels->mUnderlyingResource, mLightingChannels->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mSceneColors[0]->mUnderlyingResource, mSceneColors[0]->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mSceneColors[1]->mUnderlyingResource, mSceneColors[1]->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mGBufferA->mUnderlyingResource, mGBufferA->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mGBufferB->mUnderlyingResource, mGBufferB->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mGBufferC->mUnderlyingResource, mGBufferC->mRTVFormat);
@@ -1687,10 +1759,19 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mUnderlyingResource, mLumenCardCaptureEmissiveAtlas->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneDepth->mUnderlyingResource, mLumenSceneDepth->mRTVFormat);
     CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneOpacity->mUnderlyingResource, mLumenSceneOpacity->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneDirectLighting->mUnderlyingResource, mLumenSceneDirectLighting->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneIndirectLighting->mUnderlyingResource, mLumenSceneIndirectLighting->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneNumFramesAccumulatedAtlas->mUnderlyingResource, mLumenSceneNumFramesAccumulatedAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenSceneFinalLighting->mUnderlyingResource, mLumenSceneFinalLighting->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityTraceRadianceAtlas->mRTVFormat);
+    CreateTexture2DRTV(md3dDevice, hCpuDescriptor.Offset(1, mRtvDescriptorSize), mLumenRadiosityFilteredTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityFilteredTraceRadianceAtlas->mRTVFormat);
     viewCount = SwapChainBufferCount;
     hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mRtvHeap->GetCPUDescriptorHandleForHeapStart(), 0, mRtvDescriptorSize);
     hCpuDescriptor.Offset(SwapChainBufferCount, mRtvDescriptorSize);
-    mCPUViews["SceneColorRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+
+    mCPUViews["LightingChannelsRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["SceneColorRTV0"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["SceneColorRTV1"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
     mCPUViews["GBufferARTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
     mCPUViews["GBufferBRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
     mCPUViews["GBufferCRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
@@ -1700,6 +1781,12 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenCardCaptureEmissiveAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
     mCPUViews["LumenSceneDepthRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
     mCPUViews["LumenSceneOpacityRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenSceneDirectLightingRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenSceneIndirectLightingRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenSceneNumFramesAccumulatedAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenSceneFinalLightingRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenRadiosityTraceRadianceAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
+    mCPUViews["LumenRadiosityFilteredTraceRadianceAtlasRTV"] = hCpuDescriptor.Offset(1, mRtvDescriptorSize);
 
     // DSV
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
@@ -2148,10 +2235,10 @@ void LumenApp::BuildBuffers()
         mDFSceneObject = InitBufferFromFile(L"DistanceFields.DFObjectData", "Res/DistanceFields.DFObjectData.data");
         mLumenCards = InitBufferFromFile(L"Lumen.Cards", "Res/Lumen.Cards.data");
 
-        mGSDFPageAtlas = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.PageAtlas.dds");
-        mGSDFCoverageAtlas = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.CoverageAtlas.dds");
-        mGSDFPageTable = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.PageTableCombinedAtlas.dds");
-        mGSDFMips = D3DImage::InitTextureFromFile(L"Res/Data/GlobalDistanceField.SDFMips.dds");
+        mGSDFPageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.PageAtlas.dds");
+        mGSDFCoverageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.CoverageAtlas.dds");
+        mGSDFPageTable = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.PageTableCombinedAtlas.dds");
+        mGSDFMips = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.SDFMips.dds");
     }
     {   //ClearCardBuffer
         const D3D12_RECT scissors[] = {
@@ -2263,11 +2350,21 @@ void LumenApp::BuildBuffers()
             DXGI_FORMAT_D32_FLOAT_S8X24_UINT, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,
             { DXGI_FORMAT_D32_FLOAT_S8X24_UINT, {0.0f,0} });
         mSceneDepthZ->mUnderlyingResource->SetName(L"SceneDepthZ");
-        mSceneColor = Init2DRTImage(md3dDevice, mCommandList, bufferWidth, bufferHeight, 0,
+        mLightingChannels = Init2DRTImage(md3dDevice, mCommandList, mClientWidth, mClientHeight, 0,
+            DXGI_FORMAT_R8_UINT, DXGI_FORMAT_R8_UINT,
+            DXGI_FORMAT_R8_UINT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+            { DXGI_FORMAT_R8_UINT, {1.0f,1.0f,1.0f,1.0f} });
+        mLightingChannels->mUnderlyingResource->SetName(L"LightingChannels");
+        mSceneColors[0] = Init2DRTImage(md3dDevice, mCommandList, bufferWidth, bufferHeight, 0,
             DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
             DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
             { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
-        mSceneColor->mUnderlyingResource->SetName(L"SceneColor");
+        mSceneColors[0]->mUnderlyingResource->SetName(L"SceneColor[0]");
+        mSceneColors[1] = Init2DRTImage(md3dDevice, mCommandList, bufferWidth, bufferHeight, 0,
+            DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+            DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
+            { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+        mSceneColors[1]->mUnderlyingResource->SetName(L"SceneColor[1]");
         mGBufferA = Init2DRTImage(md3dDevice, mCommandList, bufferWidth, bufferHeight, 0,
             DXGI_FORMAT_R10G10B10A2_UNORM, DXGI_FORMAT_R10G10B10A2_UNORM,
             DXGI_FORMAT_R10G10B10A2_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET,
@@ -2327,7 +2424,7 @@ void LumenApp::BuildBuffers()
                 DXGI_FORMAT_BC7_UNORM,
                 DXGI_FORMAT_R32G32B32A32_UINT
             };
-            mLumenSceneAlbedo = Init2DRTImage3(md3dDevice10, 4096, 4096, DXGI_FORMAT_BC7_TYPELESS,
+            mLumenSceneAlbedo = Init2DRTImage3(md3dDevice10, mCommandList, 4096, 4096, DXGI_FORMAT_BC7_TYPELESS,
                 DXGI_FORMAT_R32G32B32A32_UINT, DXGI_FORMAT_R32G32B32A32_UINT,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, castableFormats, _countof(castableFormats));
             mLumenSceneAlbedo->mUnderlyingResource->SetName(L"Lumen.SceneAlbedo");
@@ -2344,7 +2441,7 @@ void LumenApp::BuildBuffers()
                 DXGI_FORMAT_BC5_UNORM,
                 DXGI_FORMAT_R32G32B32A32_UINT
             };
-            mLumenSceneNormal = Init2DRTImage3(md3dDevice10, 4096, 4096, DXGI_FORMAT_BC5_UNORM,
+            mLumenSceneNormal = Init2DRTImage3(md3dDevice10, mCommandList, 4096, 4096, DXGI_FORMAT_BC5_UNORM,
                 DXGI_FORMAT_R32G32B32A32_UINT, DXGI_FORMAT_R32G32B32A32_UINT,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, castableFormats, _countof(castableFormats));
             mLumenSceneNormal->mUnderlyingResource->SetName(L"Lumen.SceneNormal");
@@ -2356,7 +2453,7 @@ void LumenApp::BuildBuffers()
                 DXGI_FORMAT_BC6H_UF16,
                 DXGI_FORMAT_R32G32B32A32_UINT
             };
-            mLumenSceneEmissive = Init2DRTImage3(md3dDevice10, 4096, 4096, DXGI_FORMAT_BC6H_UF16,
+            mLumenSceneEmissive = Init2DRTImage3(md3dDevice10, mCommandList, 4096, 4096, DXGI_FORMAT_BC6H_UF16,
                 DXGI_FORMAT_R32G32B32A32_UINT, DXGI_FORMAT_R32G32B32A32_UINT,
                 D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, castableFormats, _countof(castableFormats));
             mLumenSceneEmissive->mUnderlyingResource->SetName(L"Lumen.SceneEmissive");
@@ -2369,11 +2466,43 @@ void LumenApp::BuildBuffers()
                 DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                 { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
             mLumenSceneDirectLighting->mUnderlyingResource->SetName(L"Lumen.SceneDirectLighting");
+            mLumenSceneIndirectLighting = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenSceneIndirectLighting->mUnderlyingResource->SetName(L"Lumen.SceneIndirectLighting");
+            mLumenSceneNumFramesAccumulatedAtlas = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM,
+                DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R8_UNORM, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenSceneNumFramesAccumulatedAtlas->mUnderlyingResource->SetName(L"Lumen.SceneNumFramesAccumulatedAtlas");
             mLumenSceneFinalLighting = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
                 DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
                 DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                 { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
             mLumenSceneFinalLighting->mUnderlyingResource->SetName(L"Lumen.SceneFinalLighting");
+            mLumenRadiosityTraceRadianceAtlas = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                    DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                    DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                    { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource->SetName(L"Lumen.Radiosity.TraceRadianceAtlas");
+            mLumenRadiosityFilteredTraceRadianceAtlas = Init2DRTImage(md3dDevice, mCommandList, 4096, 4096, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenRadiosityFilteredTraceRadianceAtlas->mUnderlyingResource->SetName(L"Lumen.Radiosity.FilteredTraceRadianceAtlas");
+        }
+        {   //StochasticLightingDepthHistorys
+            mStochasticLightingDepthHistorys[0] = Init2DRTImage(md3dDevice, mCommandList, mClientWidth, mClientHeight, 0,
+                DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT,
+                DXGI_FORMAT_R32_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R32_FLOAT, {1.0f,1.0f,1.0f,1.0f} });
+            mStochasticLightingDepthHistorys[0]->mUnderlyingResource->SetName(L"StochasticLighting.DepthHistorys[0]");
+            mStochasticLightingDepthHistorys[1] = Init2DRTImage(md3dDevice, mCommandList, mClientWidth, mClientHeight, 0,
+                DXGI_FORMAT_R32_FLOAT, DXGI_FORMAT_R32_FLOAT,
+                DXGI_FORMAT_R32_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R32_FLOAT, {1.0f,1.0f,1.0f,1.0f} });
+            mStochasticLightingDepthHistorys[1]->mUnderlyingResource->SetName(L"StochasticLighting.DepthHistorys[1]");
         }
     }
 }

@@ -1,50 +1,28 @@
 #include "D3DImage.h"
 
-D3DImage* D3DImage::InitTextureFromFile(LPCTSTR inImagePath)
+D3DImage* D3DImage::InitTextureFromFile(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList, LPCTSTR inImagePath)
 {
-    //ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice, mCommandList, texMap->Filename.c_str(), texMap->Resource, texMap->UploadHeap));
-    return nullptr;
-}
-
-D3DImage* D3DImage::FileImageToUAVImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList)
-{
-    D3D12_RESOURCE_DESC resourceDesc = mUnderlyingResource->GetDesc();
-    resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-    D3D12_HEAP_PROPERTIES d3dHeapProperties = {};
-    d3dHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-    ID3D12Resource* resource;
-    HRESULT hResult = d3dDevice->CreateCommittedResource(
-        &d3dHeapProperties,
-        D3D12_HEAP_FLAG_NONE,
-        &resourceDesc,
-        D3D12_RESOURCE_STATE_COPY_DEST,
-        nullptr,
-        IID_PPV_ARGS(&resource)
+    ID3D12Resource* texture = nullptr;
+    ID3D12Resource* textureUploadHeap = nullptr;
+    HRESULT hr = DirectX::CreateDDSTextureFromFile12(
+        d3dDevice,
+        cmdList,
+        inImagePath,
+        texture,
+        textureUploadHeap
     );
-    if (hResult == S_OK) {
-        D3DImage* image = new D3DImage();
-        image->mUnderlyingResource = resource;
-        image->mFormat = mFormat;
-        image->mSRVFormat = mSRVFormat;
-        image->mRTVFormat = mRTVFormat;
-        image->mResourceDimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-        image->mClearValue = {};
-        {
-            std::vector<D3D12_RESOURCE_BARRIER> barriers;
-            barriers.push_back(InitResourceBarrier(mUnderlyingResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE));
-            cmdList->ResourceBarrier(barriers.size(), barriers.data());
-        }
-        {
-            cmdList->CopyResource(image->mUnderlyingResource, mUnderlyingResource);
-        }
-        {
-            std::vector<D3D12_RESOURCE_BARRIER> barriers;
-            barriers.push_back(InitResourceBarrier(image->mUnderlyingResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ));
-            cmdList->ResourceBarrier(barriers.size(), barriers.data());
-        }
-        return image;
+    if (FAILED(hr)) {
+        wprintf(L"InitTextureFromFile [%s] failed\n", inImagePath);
+        return nullptr;
     }
-    return nullptr;
+    D3D12_RESOURCE_DESC resourceDesc = texture->GetDesc();
+    D3DImage* image = new D3DImage;
+    image->mUnderlyingResource = texture;
+    image->mFormat = resourceDesc.Format;
+    image->mSRVFormat = resourceDesc.Format;
+    image->mRTVFormat = resourceDesc.Format;
+    image->mClearValue = {};
+    return image;
 }
 
 D3DImage* Init2DRTImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdList, UINT64 inWidth, UINT64 inHeight, UINT64 inAlignment, DXGI_FORMAT inFormat, DXGI_FORMAT inSRVFormat, DXGI_FORMAT inRTFormat, D3D12_RESOURCE_FLAGS inFlags, D3D12_CLEAR_VALUE inClearValue, int inMipLevelCount /*= 1*/)
@@ -70,7 +48,7 @@ D3DImage* Init2DRTImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdL
         D3D12_HEAP_FLAG_NONE,
         &resourceDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
-        (inFlags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) ? nullptr : &inClearValue,
+        ((inFlags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET)||(inFlags& D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) ? &inClearValue : nullptr,
         IID_PPV_ARGS(&resource)
     );
     if (hResult != S_OK) {
@@ -86,7 +64,7 @@ D3DImage* Init2DRTImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdL
     return image;
 }
 
-D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, UINT64 inWidth, UINT64 inHeight,
+D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, ID3D12GraphicsCommandList* cmdList, UINT64 inWidth, UINT64 inHeight,
     DXGI_FORMAT inFormat, DXGI_FORMAT inSRVFormat, DXGI_FORMAT inRTFormat,
     D3D12_RESOURCE_FLAGS inFlags, DXGI_FORMAT* inCastableFormats, int inCastableFormatCount) {
     D3D12_RESOURCE_DESC1 resourceDesc = {};
@@ -105,11 +83,6 @@ D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, UINT64 inWidth, UINT64 inHei
     D3D12_HEAP_PROPERTIES d3dHeapProperties = {};
     d3dHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;//gpu
     ID3D12Resource* resource;
-    DXGI_FORMAT castableFormats[] = {
-        DXGI_FORMAT_BC7_UNORM_SRGB,
-        DXGI_FORMAT_BC7_UNORM,
-        DXGI_FORMAT_R32G32B32A32_UINT
-    };
     HRESULT hResult = d3dDevice->CreateCommittedResource3(
         &d3dHeapProperties,
         D3D12_HEAP_FLAG_NONE,
@@ -124,6 +97,10 @@ D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, UINT64 inWidth, UINT64 inHei
     if (hResult != S_OK) {
         throw std::runtime_error("Init2DRTImage Failed");
     }
+    // 使用传统屏障将资源从 COMMON 状态转换出来
+    D3D12_RESOURCE_BARRIER barrier = InitResourceBarrier(resource, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_GENERIC_READ);
+    cmdList->ResourceBarrier(1, &barrier);
+
     D3DImage* image = new D3DImage(true);
     image->mUnderlyingResource = resource;
     image->mFormat = inFormat;
