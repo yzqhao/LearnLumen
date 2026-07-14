@@ -75,6 +75,10 @@ private:
     D3DImage* mGSDFPageTable;
     D3DImage* mGSDFMips;
 
+    //HZB
+    D3DImage* mHZBFurthest;
+    D3DImage* mHZBClosest;
+    //base pass
     D3DImage* mSceneDepthZ;
     D3DImage* mLightingChannels;
     D3DImage* mSceneColors[2];
@@ -135,6 +139,17 @@ private:
     GlobalConstants mGlobalConstants;
     std::unique_ptr<UploadBuffer<GlobalConstants>> mObjectCB = nullptr;
     UINT mCbvOffset;
+
+    struct HZBConstants
+    {
+        float DispatchThreadIdToBufferUV[4];
+        uint32_t PixelViewPortMinMax[4];
+        float InputViewportMaxBound[2];
+        float InvSize[2];
+    };
+    HZBConstants mHZBConstants[3];
+    std::unique_ptr<UploadBuffer<HZBConstants>> mHZBCB[3];
+    UINT mHZBCbvOffset;
 
     std::unique_ptr<MeshGeometry> mCubeGeo = nullptr;
     std::unique_ptr<MeshGeometry> mScreenFullGeo = nullptr;

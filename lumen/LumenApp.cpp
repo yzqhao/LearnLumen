@@ -406,6 +406,53 @@ void LumenApp::Update(const GameTimer& gt)
 
     OnKeyboardInput(gt);
     mObjectCB->CopyData(0, mGlobalConstants);
+
+    // Fill HZB constants
+    int inputW = ((mClientWidth + 8 - 1) / 8) * 8;
+    int inputH = mClientHeight;
+    mHZBConstants[0].DispatchThreadIdToBufferUV[0] = 2.0f / (float)inputW;
+    mHZBConstants[0].DispatchThreadIdToBufferUV[1] = 2.0f / (float)inputH;
+    mHZBConstants[0].DispatchThreadIdToBufferUV[2] = 0.0f;
+    mHZBConstants[0].DispatchThreadIdToBufferUV[3] = 0.0f;
+    mHZBConstants[0].PixelViewPortMinMax[0] = 0;
+    mHZBConstants[0].PixelViewPortMinMax[1] = 0;
+    mHZBConstants[0].PixelViewPortMinMax[2] = mClientWidth - 1;
+    mHZBConstants[0].PixelViewPortMinMax[3] = mClientHeight - 1;
+    mHZBConstants[0].InputViewportMaxBound[0] = ((float)inputW - 0.5f) / (float)inputW;
+    mHZBConstants[0].InputViewportMaxBound[1] = ((float)inputH - 0.5f) / (float)inputH;
+    mHZBConstants[0].InvSize[0] = 1.0f / (float)inputW;
+    mHZBConstants[0].InvSize[1] = 1.0f / (float)inputH;
+    mHZBCB[0]->CopyData(0, mHZBConstants[0]);
+
+    int inputWH = 64;
+    mHZBConstants[1].DispatchThreadIdToBufferUV[0] = 2.0f / (float)inputWH;
+    mHZBConstants[1].DispatchThreadIdToBufferUV[1] = 2.0f / (float)inputWH;
+    mHZBConstants[1].DispatchThreadIdToBufferUV[2] = 0.0f;
+    mHZBConstants[1].DispatchThreadIdToBufferUV[3] = 0.0f;
+    mHZBConstants[1].PixelViewPortMinMax[0] = 0;
+    mHZBConstants[1].PixelViewPortMinMax[1] = 0;
+    mHZBConstants[1].PixelViewPortMinMax[2] = inputWH - 1;
+    mHZBConstants[1].PixelViewPortMinMax[3] = inputWH - 1;
+    mHZBConstants[1].InputViewportMaxBound[0] = 1.0f;
+    mHZBConstants[1].InputViewportMaxBound[1] = 1.0f;
+    mHZBConstants[1].InvSize[0] = 1.0f / (float)inputWH;
+    mHZBConstants[1].InvSize[1] = 1.0f / (float)inputWH;
+    mHZBCB[1]->CopyData(0, mHZBConstants[1]);
+
+    inputWH = 2;
+    mHZBConstants[2].DispatchThreadIdToBufferUV[0] = 2.0f / (float)inputWH;
+    mHZBConstants[2].DispatchThreadIdToBufferUV[1] = 2.0f / (float)inputWH;
+    mHZBConstants[2].DispatchThreadIdToBufferUV[2] = 0.0f;
+    mHZBConstants[2].DispatchThreadIdToBufferUV[3] = 0.0f;
+    mHZBConstants[2].PixelViewPortMinMax[0] = 0;
+    mHZBConstants[2].PixelViewPortMinMax[1] = 0;
+    mHZBConstants[2].PixelViewPortMinMax[2] = inputWH - 1;
+    mHZBConstants[2].PixelViewPortMinMax[3] = inputWH - 1;
+    mHZBConstants[2].InputViewportMaxBound[0] = 1.0f;
+    mHZBConstants[2].InputViewportMaxBound[1] = 1.0f;
+    mHZBConstants[2].InvSize[0] = 1.0f / (float)inputWH;
+    mHZBConstants[2].InvSize[1] = 1.0f / (float)inputWH;
+    mHZBCB[2]->CopyData(0, mHZBConstants[2]);
 }
 
 void LumenApp::Draw(const GameTimer& gt)
@@ -463,6 +510,113 @@ void LumenApp::Draw(const GameTimer& gt)
 
         barriers[0] = InitResourceBarrier(mSceneDepthZ->mUnderlyingResource, D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+    {   // HZB
+        SCOPED_EVENT(mCommandList, L"HZB");
+        CD3DX12_GPU_DESCRIPTOR_HANDLE hzbCbvGpu0 = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mHZBCbvOffset, mCbvSrvDescriptorSize);
+        CD3DX12_GPU_DESCRIPTOR_HANDLE hzbCbvGpu1 = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mHZBCbvOffset+1, mCbvSrvDescriptorSize);
+        CD3DX12_GPU_DESCRIPTOR_HANDLE hzbCbvGpu2 = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mHZBCbvOffset+2, mCbvSrvDescriptorSize);
+        {   // HZB0
+            SCOPED_EVENT(mCommandList, L"ReduceHZB(mips[0:3] Closest Furthest) 512x512");
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBFurthest, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            PUSH_BARRIER(mHZBClosest, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
+
+            mCommandList->SetPipelineState(mPSOs["HZB0"]);
+            mCommandList->SetComputeRootSignature(mRootSignatures["HZB_UAV8"]);
+            mCommandList->SetComputeRootDescriptorTable(0, hzbCbvGpu0);
+            mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["SceneDepthZSRV"]);
+            mCommandList->SetComputeRootDescriptorTable(2, mGPUViews["HZBFurthestMip0UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["HZBFurthestMip1UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["HZBFurthestMip2UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(5, mGPUViews["HZBFurthestMip3UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(6, mGPUViews["HZBClosestMip0UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(7, mGPUViews["HZBClosestMip1UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(8, mGPUViews["HZBClosestMip2UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(9, mGPUViews["HZBClosestMip3UAV"]);
+            mCommandList->Dispatch(64, 64, 1);
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBFurthest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            PUSH_BARRIER(mHZBClosest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        }
+        {   // HZB1
+            SCOPED_EVENT(mCommandList, L"ReduceHZB(mips[4:7] Furthest) 32x32");
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBFurthest, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
+
+            mCommandList->SetPipelineState(mPSOs["HZB1"]);
+            mCommandList->SetComputeRootSignature(mRootSignatures["HZB_UAV4"]);
+            mCommandList->SetComputeRootDescriptorTable(0, hzbCbvGpu1);
+            mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["HZBFurthestMip3SRV"]);
+            mCommandList->SetComputeRootDescriptorTable(2, mGPUViews["HZBFurthestMip4UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["HZBFurthestMip5UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["HZBFurthestMip6UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(5, mGPUViews["HZBFurthestMip7UAV"]);
+            mCommandList->Dispatch(32, 32, 1);
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBFurthest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        }
+        {   // HZB2
+            SCOPED_EVENT(mCommandList, L"ReduceHZB(mips[4:7] Closest) 32x32");
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBClosest, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
+
+            mCommandList->SetPipelineState(mPSOs["HZB2"]);
+            mCommandList->SetComputeRootSignature(mRootSignatures["HZB_UAV4"]);
+            mCommandList->SetComputeRootDescriptorTable(0, hzbCbvGpu1);
+            mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["HZBClosestMip3SRV"]);
+            mCommandList->SetComputeRootDescriptorTable(2, mGPUViews["HZBClosestMip4UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["HZBClosestMip5UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["HZBClosestMip6UAV"]);
+            mCommandList->SetComputeRootDescriptorTable(5, mGPUViews["HZBClosestMip7UAV"]);
+            mCommandList->Dispatch(32, 32, 1);
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBClosest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        }
+        {   // HZB3
+            SCOPED_EVENT(mCommandList, L"ReduceHZB(mips[8:8] Furthest) 2x2");
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBFurthest, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
+
+            mCommandList->SetPipelineState(mPSOs["HZB3"]);
+            mCommandList->SetComputeRootSignature(mRootSignatures["HZB_UAV1"]);
+            mCommandList->SetComputeRootDescriptorTable(0, hzbCbvGpu2);
+            mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["HZBFurthestMip7SRV"]);
+            mCommandList->SetComputeRootDescriptorTable(2, mGPUViews["HZBFurthestMip8UAV"]);
+            mCommandList->Dispatch(32, 32, 1);
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBFurthest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        }
+        {   // HZB4
+            SCOPED_EVENT(mCommandList, L"ReduceHZB(mips[8:8] Closest) 2x2");
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBClosest, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            END_BARRIER(mCommandList);
+
+            mCommandList->SetPipelineState(mPSOs["HZB4"]);
+            mCommandList->SetComputeRootSignature(mRootSignatures["HZB_UAV1"]);
+            mCommandList->SetComputeRootDescriptorTable(0, hzbCbvGpu2);
+            mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["HZBClosestMip7SRV"]);
+            mCommandList->SetComputeRootDescriptorTable(2, mGPUViews["HZBClosestMip8UAV"]);
+            mCommandList->Dispatch(32, 32, 1);
+
+            BEGIN_BARRIER();
+            PUSH_BARRIER(mHZBClosest, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+            END_BARRIER(mCommandList);
+        }
     }
     {   //ClearCardCapture
         auto ExecuteMeshCardCapturePass = [&]() {
@@ -705,8 +859,6 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->OMSetBlendFactor(blendFactor);
             mCommandList->OMSetStencilRef(0x84);
 
-            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
             mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
@@ -746,8 +898,6 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->OMSetBlendFactor(blendFactor);
             mCommandList->OMSetStencilRef(0x84);
 
-            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
             mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureAlbedoAtlasSRV"]);
@@ -790,8 +940,6 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->OMSetBlendFactor(blendFactor);
             mCommandList->OMSetStencilRef(0x84);
 
-            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
             mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureAlbedoAtlasSRV"]);
@@ -829,8 +977,6 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->OMSetBlendFactor(blendFactor);
             mCommandList->OMSetStencilRef(0x84);
 
-            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
             mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureNormalAtlasSRV"]);
@@ -869,8 +1015,6 @@ void LumenApp::Draw(const GameTimer& gt)
             mCommandList->OMSetBlendFactor(blendFactor);
             mCommandList->OMSetStencilRef(0x84);
 
-            //CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
-            //mCommandList->SetGraphicsRootDescriptorTable(0, hCbvGpuDescriptor);
             mCommandList->SetGraphicsRootShaderResourceView(0, mRectDataBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootShaderResourceView(1, mRectUVBuffer->mUnderlyingResource->GetGPUVirtualAddress());
             mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["LumenCardCaptureEmissiveAtlasSRV"]);
@@ -1244,6 +1388,12 @@ void LumenApp::BuildShadersAndInputLayout()
 	HRESULT hr = S_OK;
 
     mDxcByteCodes["PreZVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\PreZ.hlsl", nullptr, 0, L"VS", L"vs_6_6");
+
+    mDxcByteCodes["HZB0CS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\HZB\\HZB0.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["HZB1CS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\HZB\\HZB1.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["HZB2CS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\HZB\\HZB2.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["HZB3CS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\HZB\\HZB3.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["HZB4CS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\HZB\\HZB4.hlsl", nullptr, 0, L"CS", L"cs_6_6");
 
     mDxcByteCodes["ClearCardCaptureVS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\ClearCardCapture.hlsl", nullptr, 0, L"VS", L"vs_6_6");
     mDxcByteCodes["ClearCardCapturePS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\UpdateSurfaceCache\\ClearCardCapture.hlsl", nullptr, 0, L"PS", L"ps_6_6");
@@ -1685,6 +1835,61 @@ void LumenApp::BuildPSO()
         computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
         ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["ClearScreenProbe"])));
     }
+    {   //HZB0
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["HZB_UAV8"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["HZB0CS"]->GetBufferPointer()),
+            mDxcByteCodes["HZB0CS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["HZB0"])));
+    }
+    {   //HZB1
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["HZB_UAV4"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["HZB1CS"]->GetBufferPointer()),
+            mDxcByteCodes["HZB1CS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["HZB1"])));
+    }
+    {   //HZB2
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["HZB_UAV4"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["HZB2CS"]->GetBufferPointer()),
+            mDxcByteCodes["HZB2CS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["HZB2"])));
+    }
+    {   //HZB3
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["HZB_UAV1"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["HZB3CS"]->GetBufferPointer()),
+            mDxcByteCodes["HZB3CS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["HZB3"])));
+    }
+    {   //HZB4
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["HZB_UAV1"];
+        computePsoDesc.CS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["HZB4CS"]->GetBufferPointer()),
+            mDxcByteCodes["HZB4CS"]->GetBufferSize()
+        };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["HZB4"])));
+    }
 }
 
 static void CreateTexture2DDSV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, D3DImage* inDSRT, D3D12_DSV_FLAGS inFlags=D3D12_DSV_FLAG_NONE)
@@ -1779,6 +1984,28 @@ void LumenApp::BuildDescriptorHeaps()
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE hCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
     CD3DX12_GPU_DESCRIPTOR_HANDLE hGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), 0, mCbvSrvDescriptorSize);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 1);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 2);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 3);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 4);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 5);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 6);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 7);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mRTVFormat, 8);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 1);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 2);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 3);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 4);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 5);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 6);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 7);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mRTVFormat, 8);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mSRVFormat, 3);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBFurthest->mUnderlyingResource, mHZBFurthest->mSRVFormat, 7);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mSRVFormat, 3);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mHZBClosest->mUnderlyingResource, mHZBClosest->mSRVFormat, 7);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLightingChannels->mUnderlyingResource, mLightingChannels->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mSceneColors[0]->mUnderlyingResource, mSceneColors[0]->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mSceneColors[1]->mUnderlyingResource, mSceneColors[1]->mSRVFormat, 0);
@@ -1821,6 +2048,28 @@ void LumenApp::BuildDescriptorHeaps()
     CreateRWByteAddressBufferUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenScreenProbeGatherCompactedTraceTexelAllocator->mUnderlyingResource, DXGI_FORMAT_R32_TYPELESS);
     CreateRWByteAddressBufferUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenScreenProbeGatherCompactedTraceTexelData->mUnderlyingResource, DXGI_FORMAT_R32_TYPELESS);
 
+    mCPUViews["HZBFurthestMip0UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip1UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip2UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip3UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip4UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip5UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip6UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip7UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip8UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip0UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip1UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip2UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip3UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip4UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip5UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip6UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip7UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip8UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip3SRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBFurthestMip7SRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip3SRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["HZBClosestMip7SRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LightingChannelsSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["SceneColorSRV0"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["SceneColorSRV1"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1863,6 +2112,28 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["CompactedTraceTexelAllocatorUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["CompactedTraceTexelDataUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
+    mGPUViews["HZBFurthestMip0UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip1UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip2UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip3UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip4UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip5UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip6UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip7UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip8UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip0UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip1UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip2UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip3UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip4UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip5UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip6UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip7UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip8UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip3SRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBFurthestMip7SRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip3SRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["HZBClosestMip7SRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LightingChannelsSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["SceneColorSRV0"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["SceneColorSRV1"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1996,6 +2267,18 @@ void LumenApp::BuildConstantBuffers()
     md3dDevice->CreateConstantBufferView(
         &cbvDesc,
         hCbvCpuDescriptor);
+
+    // HZB constant buffer
+    mHZBCbvOffset = mCbvOffset + 1;
+    for (int i = 0; i < 3; ++i)
+    {
+        mHZBCB[i] = std::make_unique<UploadBuffer<HZBConstants>>(md3dDevice, 1, true);
+        D3D12_CONSTANT_BUFFER_VIEW_DESC hzbCbvDesc;
+        hzbCbvDesc.BufferLocation = mHZBCB[i]->Resource()->GetGPUVirtualAddress();
+        hzbCbvDesc.SizeInBytes = d3dUtil::CalcConstantBufferByteSize(sizeof(HZBConstants));
+        CD3DX12_CPU_DESCRIPTOR_HANDLE hzbCbvCpuDescriptor = CD3DX12_CPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), mHZBCbvOffset + i, mCbvSrvDescriptorSize);
+        md3dDevice->CreateConstantBufferView(&hzbCbvDesc, hzbCbvCpuDescriptor);
+    }
 }
 
 void LumenApp::BuildRootSignature()
@@ -2432,6 +2715,139 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["ClearScreenProbe"])));
     }
+    {   //HZB_UAV1
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0;
+        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[3];
+        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+        slotRootParameter[1].InitAsDescriptorTable(1, &srvTable0);
+        slotRootParameter[2].InitAsDescriptorTable(1, &uavTable0);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(3, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["HZB_UAV1"])));
+    }
+    {   //HZB_UAV8
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0;
+        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1;
+        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE uavTable2;
+        uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE uavTable3;
+        uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE uavTable4;
+        uavTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE uavTable5;
+        uavTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE uavTable6;
+        uavTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE uavTable7;
+        uavTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 7);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[10];
+        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+        slotRootParameter[1].InitAsDescriptorTable(1, &srvTable0);
+        slotRootParameter[2].InitAsDescriptorTable(1, &uavTable0);
+        slotRootParameter[3].InitAsDescriptorTable(1, &uavTable1);
+        slotRootParameter[4].InitAsDescriptorTable(1, &uavTable2);
+        slotRootParameter[5].InitAsDescriptorTable(1, &uavTable3);
+        slotRootParameter[6].InitAsDescriptorTable(1, &uavTable4);
+        slotRootParameter[7].InitAsDescriptorTable(1, &uavTable5);
+        slotRootParameter[8].InitAsDescriptorTable(1, &uavTable6);
+        slotRootParameter[9].InitAsDescriptorTable(1, &uavTable7);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(10, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["HZB_UAV8"])));
+    }
+    
+    {   //HZB_UAV4
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable0;
+        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0;
+        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1;
+        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE uavTable2;
+        uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE uavTable3;
+        uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
+
+        CD3DX12_ROOT_PARAMETER slotRootParameter[6];
+        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+        slotRootParameter[1].InitAsDescriptorTable(1, &srvTable0);
+        slotRootParameter[2].InitAsDescriptorTable(1, &uavTable0);
+        slotRootParameter[3].InitAsDescriptorTable(1, &uavTable1);
+        slotRootParameter[4].InitAsDescriptorTable(1, &uavTable2);
+        slotRootParameter[5].InitAsDescriptorTable(1, &uavTable3);
+
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(6, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["HZB_UAV4"])));
+    }
 }
 
 static D3DResource* InitBufferResource(ID3D12Device* pDevice, UINT64 inBufferSize, UINT64 inAlignment = 0llu, D3D12_RESOURCE_STATES inInitialState = D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_FLAGS inFlags=D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS)
@@ -2496,6 +2912,18 @@ void LumenApp::BuildBuffers()
         mGSDFCoverageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.CoverageAtlas.dds");
         mGSDFPageTable = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.PageTableCombinedAtlas.dds");
         mGSDFMips = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.SDFMips.dds");
+    }
+    {   // HZB
+        mHZBFurthest = Init2DRTImage(md3dDevice, mCommandList, 512, 512, 0,
+            DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, { DXGI_FORMAT_R16_FLOAT, {0.0f,0} }, 9
+        );
+        mHZBFurthest->mUnderlyingResource->SetName(L"HZBFurthest");
+        mHZBClosest = Init2DRTImage(md3dDevice, mCommandList, 512, 512, 0,
+            DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT, DXGI_FORMAT_R16_FLOAT,
+            D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, { DXGI_FORMAT_R16_FLOAT, {0.0f,0} }, 9
+        );
+        mHZBClosest->mUnderlyingResource->SetName(L"HZBClosest");
     }
     {   //ClearCardBuffer
         const D3D12_RECT scissors[] = {
