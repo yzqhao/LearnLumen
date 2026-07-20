@@ -1309,7 +1309,66 @@ static HRESULT CreateD3DResources12(
 				UpdateSubresources(cmdList, texture, textureUploadHeap, 0, 0, num2DSubresources, initData);
 
 				cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture,
-					D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+					D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ));
+			}
+		}
+	} break;
+
+	case D3D12_RESOURCE_DIMENSION_TEXTURE3D:
+	{
+		D3D12_RESOURCE_DESC texDesc;
+		ZeroMemory(&texDesc, sizeof(D3D12_RESOURCE_DESC));
+		texDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+		texDesc.Alignment = 0;
+		texDesc.Width = width;
+		texDesc.Height = (uint32_t)height;
+		texDesc.DepthOrArraySize = (uint16_t)depth;
+		texDesc.MipLevels = (uint16_t)mipCount;
+		texDesc.Format = format;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		texDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+		hr = device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&texDesc,
+			D3D12_RESOURCE_STATE_COMMON,
+			nullptr,
+			IID_PPV_ARGS(&texture));
+
+		if (FAILED(hr))
+		{
+			texture = nullptr;
+			return hr;
+		}
+		else
+		{
+			const UINT num3DSubresources = texDesc.MipLevels;
+			const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texture, 0, num3DSubresources);
+
+			hr = device->CreateCommittedResource(
+				&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+				D3D12_HEAP_FLAG_NONE,
+				&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
+				D3D12_RESOURCE_STATE_GENERIC_READ,
+				nullptr,
+				IID_PPV_ARGS(&textureUploadHeap));
+			if (FAILED(hr))
+			{
+				texture = nullptr;
+				return hr;
+			}
+			else
+			{
+				cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture,
+					D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
+
+				UpdateSubresources(cmdList, texture, textureUploadHeap, 0, 0, num3DSubresources, initData);
+
+				cmdList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture,
+					D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ));
 			}
 		}
 	} break;
@@ -1763,7 +1822,26 @@ static HRESULT CreateTextureFromDDS12(
 		format = GetDXGIFormat(header->ddspf);
 
 		if (format == DXGI_FORMAT_UNKNOWN)
-			return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+		{
+			// Infer actual format from data size when pixel format header is wrong
+			// Some DDS exporters write incorrect bits-per-pixel in the pixel format header
+			if (bitSize > 0 && width > 0 && height > 0 && depth > 0 && mipCount == 1)
+			{
+				size_t totalPixels = static_cast<size_t>(width) * height * depth;
+				size_t bytesPerPixel = bitSize / totalPixels;
+				if (bytesPerPixel > 0 && bitSize == totalPixels * bytesPerPixel)
+				{
+					switch (bytesPerPixel)
+					{
+					case 1: format = DXGI_FORMAT_R8_UNORM; break;
+					case 2: format = DXGI_FORMAT_R16_FLOAT; break;
+					case 4: format = DXGI_FORMAT_R32_FLOAT; break;
+					}
+				}
+			}
+			if (format == DXGI_FORMAT_UNKNOWN)
+				return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
+		}
 
 		if (header->flags & DDS_HEADER_FLAGS_VOLUME)
 		{

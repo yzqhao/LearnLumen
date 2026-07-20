@@ -140,6 +140,9 @@ private:
     std::unique_ptr<UploadBuffer<GlobalConstants>> mObjectCB = nullptr;
     UINT mCbvOffset;
 
+    std::unique_ptr<UploadBuffer<int>> DirectLightTilesCB = nullptr;
+    std::unique_ptr<UploadBuffer<int>> DirectLightCardsCB = nullptr;
+
     struct HZBConstants
     {
         float DispatchThreadIdToBufferUV[4];

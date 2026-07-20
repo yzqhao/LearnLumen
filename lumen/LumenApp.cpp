@@ -123,6 +123,53 @@ bool LumenApp::Initialize()
 	BuildPSO();
     BuildScreenFullGeometry();
 
+    DirectLightTilesCB = std::make_unique<UploadBuffer<int>>(md3dDevice, 1120, false);
+    DirectLightCardsCB = std::make_unique<UploadBuffer<int>>(md3dDevice, 1120, false);
+
+    {
+        const D3D12_RECT scissors[] = {
+        { 0,0,64,8 },//8 tile
+        { 128, 0, 128, 8 },//16 tile
+        { 128, 8, 128, 8 },//16 tile
+        { 64, 0, 64, 8 },//8 tile
+        { 256, 0, 128, 128 },//256 tile
+        { 384, 0, 128, 128 },//256 tile
+        //512 + 48 = 560 x 2 = 1120
+
+        { 0, 8, 64, 8 },
+        { 128, 16, 128, 8 },
+        { 128, 24, 128, 8 },
+        { 64, 8, 64, 8 },
+        { 512, 0, 128, 128 },
+        { 640, 0, 128, 128 },
+        };
+        int rectData[12 * 4];
+        unsigned int tilesData[1120];
+        int tileIndex = 0;
+        for (int i = 0; i < 12; i++) {
+            int offset = i * 4;
+            int left = scissors[i].left;
+            int top = scissors[i].top;
+            int right = scissors[i].left + scissors[i].right;
+            int bottom = scissors[i].top + scissors[i].bottom;
+            rectData[offset] = left;
+            rectData[offset + 1] = top;
+            rectData[offset + 2] = right;
+            rectData[offset + 3] = bottom;
+            for (int y = top; y < bottom; y += 8) {//0~7
+                for (int x = left; x < right; x += 8) {
+                    unsigned int tileLeft = (x - left) / 8;//0~15 -> 4 bit
+                    unsigned int tileTop = (y - top) / 8;//0~15 -> 4 bit
+                    tilesData[tileIndex++] = (tileTop << 28) | (tileLeft << 24) | i;//rect index
+                }
+            }
+        }
+        for (int i = 0; i < 1120; ++i)
+        {
+            DirectLightTilesCB->CopyData(i, tilesData[i]);
+        }
+    }
+
 	// Execute the initialization commands.
 	ThrowIfFailed(mCommandList->Close());
 	ID3D12CommandList* cmdsLists[] = { mCommandList };
@@ -388,7 +435,6 @@ void LumenApp::InitScene()
         0.00f, 0.00f, 0.00f, 1.00f
     };
     memcpy(mGlobalConstants.View_GlobalDistanceFieldMipTranslatedWorldToUVBias, View_GlobalDistanceFieldMipTranslatedWorldToUVBias, sizeof(View_GlobalDistanceFieldMipTranslatedWorldToUVBias));
-
 }
 
 void LumenApp::OnMouseDown(WPARAM btnState, int x, int y)
@@ -842,7 +888,7 @@ void LumenApp::Draw(const GameTimer& gt)
         mMisc.misc[3] = 0;//model matrix
         ExecuteMeshCardCapturePass(11);
     }
-    {
+    {   // Copy to Surface Caches
         SCOPED_EVENT(mCommandList, L"Copy to Surface Caches");
         {   //CopyToSurfaceCacheDepth
             SCOPED_EVENT(mCommandList, L"CopyToSurfaceCacheDepth");
@@ -1193,15 +1239,21 @@ void LumenApp::Draw(const GameTimer& gt)
 
             CD3DX12_GPU_DESCRIPTOR_HANDLE hCbvGpuDescriptor = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
             mCommandList->SetComputeRootDescriptorTable(0, hCbvGpuDescriptor);
-            mCommandList->SetComputeRootShaderResourceView(1, mRectDataBuffer->mUnderlyingResource->GetGPUVirtualAddress());
-            mCommandList->SetComputeRootShaderResourceView(2, mDFSceneObject->mUnderlyingResource->GetGPUVirtualAddress());
-            mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["LumenSceneNormalSRV"]);   //mLumenSceneNormal->mUnderlyingResource->GetGPUVirtualAddress()
-            mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["LumenSceneDepthSRV"]);   //mLumenSceneDepth->mUnderlyingResource->GetGPUVirtualAddress()
-            mCommandList->SetComputeRootShaderResourceView(5, mLumenCards->mUnderlyingResource->GetGPUVirtualAddress());
-            mCommandList->SetComputeRootDescriptorTable(6, mGPUViews["LumenSceneDirectLightingUAV"]);
-            mCommandList->SetComputeRootDescriptorTable(7, mGPUViews["LumenSceneFinalLightingUAV"]);
+            mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["RectCoordBufferSRV"]);              // t0
+            mCommandList->SetComputeRootShaderResourceView(2, DirectLightTilesCB->Resource()->GetGPUVirtualAddress());                     // t1 mGPUViews["TilesInfoSRV"]
+            mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["DirectLightingNormalAtlasSRV"]);     // t2
+            mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["DirectLightingDepthAtlasSRV"]);      // t3
+            mCommandList->SetComputeRootDescriptorTable(5, mGPUViews["LumenCardDataSRV"]);                 // t4
+            mCommandList->SetComputeRootDescriptorTable(6, mGPUViews["GDFPageAtlasSRV"]);                  // t5
+            mCommandList->SetComputeRootDescriptorTable(7, mGPUViews["GDFCoverageAtlasSRV"]);              // t6
+            mCommandList->SetComputeRootDescriptorTable(8, mGPUViews["GDFPageTableSRV"]);                  // t7
+            mCommandList->SetComputeRootDescriptorTable(9, mGPUViews["GDFMipsSRV"]);                       // t8
+            mCommandList->SetComputeRootDescriptorTable(10, mGPUViews["LumenSceneAlbedoSRV"]);             // t9
+            mCommandList->SetComputeRootDescriptorTable(11, mGPUViews["LumenSceneEmissiveSRV"]);           // t10
+            mCommandList->SetComputeRootDescriptorTable(12, mGPUViews["LumenSceneDirectLightingUAV"]);     // u0
+            mCommandList->SetComputeRootDescriptorTable(13, mGPUViews["LumenSceneFinalLightingUAV"]);      // u1
 
-            mCommandList->Dispatch(12, 1, 1);
+            mCommandList->Dispatch(1120, 1, 1);
 
             barriers[0] = InitResourceBarrier(mLumenSceneNormal->mUnderlyingResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
             barriers[1] = InitResourceBarrier(mLumenSceneDepth->mUnderlyingResource, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -1941,6 +1993,31 @@ static void CreateTexture2DSRV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDL
     pDevice->CreateShaderResourceView(inResource, &srvDesc, inMemory);
 }
 
+static void CreateTexture3DSRV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, ID3D12Resource* inResource, DXGI_FORMAT inFormat)
+{
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = inFormat;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.Texture3D.MostDetailedMip = 0;
+    srvDesc.Texture3D.MipLevels = 1;
+    srvDesc.Texture3D.ResourceMinLODClamp = 0.0f;
+    pDevice->CreateShaderResourceView(inResource, &srvDesc, inMemory);
+}
+
+static void CreateBufferSRV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, ID3D12Resource* inResource, UINT64 inByteSize, UINT inStructureByteStride)
+{
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.Buffer.FirstElement = 0;
+    srvDesc.Buffer.NumElements = static_cast<UINT>(inByteSize / inStructureByteStride);
+    srvDesc.Buffer.StructureByteStride = inStructureByteStride;
+    srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+    pDevice->CreateShaderResourceView(inResource, &srvDesc, inMemory);
+}
+
 static void CreateTexture2DRTV(ID3D12Device* pDevice, D3D12_CPU_DESCRIPTOR_HANDLE inMemory, ID3D12Resource* inResource, DXGI_FORMAT inFormat)
 {
     D3D12_RENDER_TARGET_VIEW_DESC srvDesc = {};
@@ -2040,7 +2117,26 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDirectLighting->mUnderlyingResource, mLumenSceneDirectLighting->mRTVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneFinalLighting->mUnderlyingResource, mLumenSceneFinalLighting->mRTVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDepth->mUnderlyingResource, mLumenSceneDepth->mSRVFormat, 0);
-    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mUnderlyingResource, mLumenSceneNormal->mRTVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mUnderlyingResource, mLumenSceneNormal->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneAlbedo->mUnderlyingResource, mLumenSceneAlbedo->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneEmissive->mUnderlyingResource, mLumenSceneEmissive->mSRVFormat, 0);
+    //DirectLighting SRVs (t0-t10): RectCoordBuffer, TilesInfo, NormalAtlas, DepthAtlas, CardData, GDF textures, Albedo/Emissive atlases
+    {
+        D3D12_RESOURCE_DESC rectBufDesc = mRectDataBuffer->mUnderlyingResource->GetDesc();
+        CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mRectDataBuffer->mUnderlyingResource, rectBufDesc.Width, sizeof(uint32_t) * 4);
+    }
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mUnderlyingResource, mLumenSceneNormal->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneDepth->mUnderlyingResource, mLumenSceneDepth->mSRVFormat, 0);
+    {
+        D3D12_RESOURCE_DESC cardBufDesc = mLumenCards->mUnderlyingResource->GetDesc();
+        CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCards->mUnderlyingResource, cardBufDesc.Width, sizeof(float) * 4);
+    }
+    CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFPageAtlas->mUnderlyingResource, mGSDFPageAtlas->mSRVFormat);
+    CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFCoverageAtlas->mUnderlyingResource, mGSDFCoverageAtlas->mSRVFormat);
+    CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFPageTable->mUnderlyingResource, mGSDFPageTable->mSRVFormat);
+    CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFMips->mUnderlyingResource, mGSDFMips->mSRVFormat);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, mLumenCardCaptureAlbedoAtlas->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mUnderlyingResource, mLumenCardCaptureEmissiveAtlas->mSRVFormat, 0);
     //ScreenProbe
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mSRVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mRTVFormat, 0);
@@ -2105,6 +2201,19 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenSceneFinalLightingUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneDepthSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneNormalSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneAlbedoSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneEmissiveSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    //DirectLighting SRVs (t0-t10)
+    mCPUViews["RectCoordBufferSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["DirectLightingNormalAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["DirectLightingDepthAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardDataSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GDFPageAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GDFCoverageAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GDFPageTableSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GDFMipsSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardSceneAlbedoAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardSceneEmissiveAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     //ScreenProbe
     mCPUViews["ScreenProbeSceneDepthSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["ScreenProbeSceneDepthUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -2169,6 +2278,19 @@ void LumenApp::BuildDescriptorHeaps()
     mGPUViews["LumenSceneFinalLightingUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenSceneDepthSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenSceneNormalSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneAlbedoSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneEmissiveSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    //DirectLighting SRVs (t0-t10)
+    mGPUViews["RectCoordBufferSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["DirectLightingNormalAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["DirectLightingDepthAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardDataSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GDFPageAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GDFCoverageAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GDFPageTableSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GDFMipsSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardSceneAlbedoAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardSceneEmissiveAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     //ScreenProbe
     mGPUViews["ScreenProbeSceneDepthSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["ScreenProbeSceneDepthUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -2634,24 +2756,41 @@ void LumenApp::BuildRootSignature()
         srvTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
         CD3DX12_DESCRIPTOR_RANGE srvTable4;
         srvTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE srvTable5;
+        srvTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE srvTable6;
+        srvTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE srvTable7;
+        srvTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE srvTable8;
+        srvTable8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 8);
+        CD3DX12_DESCRIPTOR_RANGE srvTable9;
+        srvTable9.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 9);
+        CD3DX12_DESCRIPTOR_RANGE srvTable10;
+        srvTable10.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 10);
 
         CD3DX12_DESCRIPTOR_RANGE cbvTable0;
         cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
 
-        CD3DX12_ROOT_PARAMETER slotRootParameter[8];
-        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
-        slotRootParameter[1].InitAsShaderResourceView(0);
+        CD3DX12_ROOT_PARAMETER slotRootParameter[14];
+        slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);             // b0
+        slotRootParameter[1].InitAsDescriptorTable(1, &srvTable0);             // t0 RectCoordBuffer
+        //slotRootParameter[2].InitAsDescriptorTable(1, &srvTable1);             // t1 TilesInfo
         slotRootParameter[2].InitAsShaderResourceView(1);
-        //slotRootParameter[3].InitAsShaderResourceView(2);
-        //slotRootParameter[4].InitAsShaderResourceView(3);
-        slotRootParameter[3].InitAsDescriptorTable(1, &srvTable2);
-        slotRootParameter[4].InitAsDescriptorTable(1, &srvTable3);
-        slotRootParameter[5].InitAsShaderResourceView(4);
-        slotRootParameter[6].InitAsDescriptorTable(1, &uavTable0);
-        slotRootParameter[7].InitAsDescriptorTable(1, &uavTable1);
+        slotRootParameter[3].InitAsDescriptorTable(1, &srvTable2);             // t2 NormalAtlas
+        slotRootParameter[4].InitAsDescriptorTable(1, &srvTable3);             // t3 DepthAtlas
+        slotRootParameter[5].InitAsDescriptorTable(1, &srvTable4);             // t4 CardData
+        slotRootParameter[6].InitAsDescriptorTable(1, &srvTable5);             // t5 GDFPageAtlas
+        slotRootParameter[7].InitAsDescriptorTable(1, &srvTable6);             // t6 GDFCoverageAtlas
+        slotRootParameter[8].InitAsDescriptorTable(1, &srvTable7);             // t7 GDFPageTable
+        slotRootParameter[9].InitAsDescriptorTable(1, &srvTable8);             // t8 GDFMipTexture
+        slotRootParameter[10].InitAsDescriptorTable(1, &srvTable9);            // t9 AlbedoAtlas
+        slotRootParameter[11].InitAsDescriptorTable(1, &srvTable10);           // t10 EmissiveAtlas
+        slotRootParameter[12].InitAsDescriptorTable(1, &uavTable0);            // u0
+        slotRootParameter[13].InitAsDescriptorTable(1, &uavTable1);            // u1
 
         auto staticSamplers = GetStaticSamplers();
-        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(8, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(14, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
             D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
         // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
@@ -2923,10 +3062,10 @@ void LumenApp::BuildBuffers()
         mDFSceneObject = InitBufferFromFile(L"DistanceFields.DFObjectData", "Res/DistanceFields.DFObjectData.data");
         mLumenCards = InitBufferFromFile(L"Lumen.Cards", "Res/Lumen.Cards.data");
 
-        mGSDFPageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.PageAtlas.dds");
-        mGSDFCoverageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.CoverageAtlas.dds");
-        mGSDFPageTable = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.PageTableCombinedAtlas.dds");
-        mGSDFMips = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/Data/GlobalDistanceField.SDFMips.dds");
+        mGSDFPageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.PageAtlas.dds");
+        mGSDFCoverageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.CoverageAtlas.dds");
+        mGSDFPageTable = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.PageTableCombinedAtlas.dds");
+        mGSDFMips = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.SDFMips.dds");
     }
     {   // HZB
         mHZBFurthest = Init2DRTImage(md3dDevice, mCommandList, 512, 512, 0,
