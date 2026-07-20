@@ -381,15 +381,45 @@ void LumenApp::InitScene()
     mGlobalConstants.mRadiosityAtlasSize[0] = 4096;
     mGlobalConstants.mRadiosityAtlasSize[1] = 4096;
     mGlobalConstants.mFixedJitterIndex = -1;
-    mGlobalConstants.View_GlobalVolumeTexelSize[0] = 0.003968f;// 0.00397f;
-    mGlobalConstants.View_GlobalDistanceFieldMipFactor[0] = 4.0f;
-    mGlobalConstants.View_GlobalDistanceFieldMipTransition[0] = 0.625f;
-    mGlobalConstants.View_NotCoveredExpandSurfaceScale[0] = 0.6f;
-    mGlobalConstants.View_CoveredExpandSurfaceScale[0] = 1.0f;
-    mGlobalConstants.View_DitheredTransparencyTraceThreshold[0] = 0.9f;
-    mGlobalConstants.View_DitheredTransparencyStepThreshold[0] = 0.5f;
-    mGlobalConstants.View_NotCoveredMinStepScale[0] = 4.0f;
-    mGlobalConstants.View_GlobalDistanceFieldClipmapSizeInPages[0] = 36;
+    mGlobalConstants.View_GlobalVolumeTexelSize = 0.003968f;// 0.00397f;
+    mGlobalConstants.View_GlobalDistanceFieldMipFactor = 4.0f;
+    mGlobalConstants.View_GlobalDistanceFieldMipTransition = 0.625f;
+    mGlobalConstants.View_NotCoveredExpandSurfaceScale = 0.6f;
+    mGlobalConstants.InvClipmapFadeSizeForMark = 1.0f;
+    mGlobalConstants.SurfaceBias = 5.0f;
+    mGlobalConstants.MinPDFToTrace = 0.1f;
+    mGlobalConstants.MinTraceDistance = 5.0f;
+    mGlobalConstants.MaxTraceDistance = 20000.0f;
+    mGlobalConstants.MaxMeshSDFTraceDistance = 180.0f;
+    mGlobalConstants.MaxRayIntensity = 40.0f;
+    mGlobalConstants.ProbePlaneWeightingDepthScale = -100.0f;
+    mGlobalConstants.ScreenProbeDownsampleFactor = 16.0f;
+    mGlobalConstants.SupersampleDistanceFromCameraSq = 4000000.0f;
+    mGlobalConstants.DownsampleDistanceFromCameraSq = 1.60000E+07;
+    mGlobalConstants.StepFactor = 1.0f;
+
+    mGlobalConstants.View_CoveredExpandSurfaceScale = 1.0f;
+    mGlobalConstants.View_DitheredTransparencyTraceThreshold = 0.9f;
+    mGlobalConstants.View_DitheredTransparencyStepThreshold = 0.5f;
+    mGlobalConstants.View_NotCoveredMinStepScale = 4.0f;
+    mGlobalConstants.MinSampleRadius = 10.0f;
+    mGlobalConstants.SpatialFilterMaxRadianceHitAngle = 0.2f;
+    mGlobalConstants.InvClipmapFadeSize = 1.0f;
+    mGlobalConstants.ReprojectionRadiusScale = 1.5f;
+    mGlobalConstants.PrevInvPreExposure = 1.0f / 2.4f;
+    mGlobalConstants.ScreenTraceNoFallbackThicknessScale = 2.0f;
+    mGlobalConstants.HistoryDepthTestRelativeThickness = 0.01f;
+    mGlobalConstants.RelativeDepthThickness = 0.02f;
+    mGlobalConstants.PrevSceneColorPreExposureCorrection = 1.0f;
+    mGlobalConstants.MaxHierarchicalScreenTraceIterations = 50.0f;
+    mGlobalConstants.NumThicknessStepsToDetermineCertainty = 0.0f;
+    mGlobalConstants.RelativeSpeedDifferenceToConsiderLightingMoving = 0.005f;
+
+    mGlobalConstants.View_GlobalDistanceFieldClipmapSizeInPages = 36;
+    mGlobalConstants.NumUniformScreenProbes = 2040u;
+    mGlobalConstants.MaxNumAdaptiveProbes = 1020u;
+    mGlobalConstants.bSupportsHairScreenTraces = 0u;
+
     mGlobalConstants.View_GlobalDistanceFieldInvPageAtlasSize[0] = 0.000977f;//0.00098f;
     mGlobalConstants.View_GlobalDistanceFieldInvPageAtlasSize[1] = 0.000977f;//0.00098f;
     mGlobalConstants.View_GlobalDistanceFieldInvPageAtlasSize[2] = 0.017857f;// 0.01786f;
@@ -1486,6 +1516,11 @@ void LumenApp::BuildShadersAndInputLayout()
     mDxcByteCodes["ToneMappingPS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ToneMapping.hlsl", nullptr, 0, L"PS", L"ps_6_6");
 
     mDxcByteCodes["DirectLightingCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\DirectLighting.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["CombineFinalLightingCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\Radiosity\\CombineFinalLighting.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["ConvertToSHCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\Radiosity\\ConvertToSH.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["IntegrateCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\Radiosity\\Integrate.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["RadiosityCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\Radiosity\\Radiosity.hlsl", nullptr, 0, L"CS", L"cs_6_6");
+    mDxcByteCodes["SpatialFilterProbeCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\LumenSceneLighting\\Radiosity\\SpatialFilterProbe.hlsl", nullptr, 0, L"CS", L"cs_6_6");
 
     //LumenSceneProbeGather
     mDxcByteCodes["ClearScreenProbeCS"] = d3dUtil::DxcCompileShader(L"lumen\\shader\\ScreenProbeGather\\ClearScreenProbe.hlsl", nullptr, 0, L"CS", L"cs_6_6");

@@ -36,15 +36,45 @@ struct GlobalConstants
             float View_GlobalDistanceFieldMipTranslatedWorldToUVScale[24];
             float View_GlobalDistanceFieldMipTranslatedWorldToUVBias[24];
 
-            float View_GlobalVolumeTexelSize[4];
-            float View_GlobalDistanceFieldMipFactor[4];//
-            float View_GlobalDistanceFieldMipTransition[4];
-            float View_NotCoveredExpandSurfaceScale[4];
-            float View_CoveredExpandSurfaceScale[4];
-            float View_DitheredTransparencyTraceThreshold[4];
-            float View_DitheredTransparencyStepThreshold[4];
-            float View_NotCoveredMinStepScale[4];
-            int View_GlobalDistanceFieldClipmapSizeInPages[4];
+            float View_GlobalVolumeTexelSize;
+            float View_GlobalDistanceFieldMipFactor;
+            float View_GlobalDistanceFieldMipTransition;
+            float View_NotCoveredExpandSurfaceScale;
+            float InvClipmapFadeSizeForMark;
+            float SurfaceBias;
+            float MinPDFToTrace;
+            float MinTraceDistance;
+            float MaxTraceDistance;
+            float MaxMeshSDFTraceDistance;
+            float MaxRayIntensity;
+            float ProbePlaneWeightingDepthScale;
+            float ScreenProbeDownsampleFactor;
+            float SupersampleDistanceFromCameraSq;
+            float DownsampleDistanceFromCameraSq;
+            float StepFactor;
+
+            float View_CoveredExpandSurfaceScale;
+            float View_DitheredTransparencyTraceThreshold;
+            float View_DitheredTransparencyStepThreshold;
+            float View_NotCoveredMinStepScale;
+            float MinSampleRadius;
+            float SpatialFilterMaxRadianceHitAngle;
+            float InvClipmapFadeSize;
+            float ReprojectionRadiusScale;
+            float PrevInvPreExposure;
+            float ScreenTraceNoFallbackThicknessScale;
+            float HistoryDepthTestRelativeThickness;
+            float RelativeDepthThickness ;
+            float PrevSceneColorPreExposureCorrection;
+            float MaxHierarchicalScreenTraceIterations;
+            float NumThicknessStepsToDetermineCertainty;
+            float RelativeSpeedDifferenceToConsiderLightingMoving;
+
+            int View_GlobalDistanceFieldClipmapSizeInPages;
+            unsigned int NumUniformScreenProbes;
+            unsigned int MaxNumAdaptiveProbes;
+            unsigned int bSupportsHairScreenTraces;
+
             float View_GlobalDistanceFieldInvPageAtlasSize[4];
             float View_GlobalDistanceFieldInvCoverageAtlasSize[4];
         };

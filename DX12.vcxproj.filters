@@ -107,5 +107,8 @@
     <None Include="lumen\shader\GlobalConstant.hlsli">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="lumen\shader\StaticSample.hlsli">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

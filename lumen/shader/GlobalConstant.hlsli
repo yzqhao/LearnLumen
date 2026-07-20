@@ -34,15 +34,46 @@ cbuffer GlobalConstants
     float4 View_GlobalVolumeTranslatedWorldToUVAddAndMul[6];
     float4 View_GlobalDistanceFieldMipTranslatedWorldToUVScale[6];
     float4 View_GlobalDistanceFieldMipTranslatedWorldToUVBias[6];
-    float4 View_GlobalVolumeTexelSize;
-    float4 View_GlobalDistanceFieldMipFactor;//
-    float4 View_GlobalDistanceFieldMipTransition;
-    float4 View_NotCoveredExpandSurfaceScale;
-    float4 View_CoveredExpandSurfaceScale;
-    float4 View_DitheredTransparencyTraceThreshold;
-    float4 View_DitheredTransparencyStepThreshold;
-    float4 View_NotCoveredMinStepScale;
-    int4 View_GlobalDistanceFieldClipmapSizeInPages;
+    
+    float View_GlobalVolumeTexelSize;
+    float View_GlobalDistanceFieldMipFactor;
+    float View_GlobalDistanceFieldMipTransition;
+    float View_NotCoveredExpandSurfaceScale;
+	float InvClipmapFadeSizeForMark;
+	float SurfaceBias;
+	float MinPDFToTrace;
+	float MinTraceDistance;
+	float MaxTraceDistance;
+	float MaxMeshSDFTraceDistance;
+	float MaxRayIntensity;
+	float ProbePlaneWeightingDepthScale;
+	float ScreenProbeDownsampleFactor;
+	float SupersampleDistanceFromCameraSq;
+	float DownsampleDistanceFromCameraSq;
+	float StepFactor;
+
+    float View_CoveredExpandSurfaceScale;
+    float View_DitheredTransparencyTraceThreshold;
+    float View_DitheredTransparencyStepThreshold;
+    float View_NotCoveredMinStepScale;
+	float MinSampleRadius;
+	float SpatialFilterMaxRadianceHitAngle;
+	float InvClipmapFadeSize;
+	float ReprojectionRadiusScale;
+	float PrevInvPreExposure;
+	float ScreenTraceNoFallbackThicknessScale;
+	float HistoryDepthTestRelativeThickness;
+	float RelativeDepthThickness ;
+	float PrevSceneColorPreExposureCorrection;
+	float MaxHierarchicalScreenTraceIterations;
+	float NumThicknessStepsToDetermineCertainty;
+	float RelativeSpeedDifferenceToConsiderLightingMoving;
+
+    int View_GlobalDistanceFieldClipmapSizeInPages;
+	uint NumUniformScreenProbes = 2040u;
+	uint MaxNumAdaptiveProbes = 1020u;
+	bool bSupportsHairScreenTraces=false;
+    
     float4 View_GlobalDistanceFieldInvPageAtlasSize;
     float4 View_GlobalDistanceFieldInvCoverageAtlasSize;
 }
