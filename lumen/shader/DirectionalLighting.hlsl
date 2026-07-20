@@ -6,13 +6,6 @@ Texture2D GBufferC : register(t2);
 Texture2D SceneDepth : register(t3);
 Texture2D ShadowMaskTexture : register(t4);
 
-SamplerState gsamPointWrap : register(s0);
-SamplerState gsamPointClamp : register(s1);
-SamplerState gsamLinearWrap : register(s2);
-SamplerState gsamLinearClamp : register(s3);
-SamplerState gsamAnisotropicWrap : register(s4);
-
-const static float PI = 3.1415926535897932f;
 const static float View_MinRoughness = 0.02f;
 const static float2 DeferredLightUniforms_DistanceFadeMAD = float2(0.0002f, -9.0f);
 const static float4 View_InvDeviceZToWorldZTransform = float4(0.0f, 0.0f, 0.1f, -1.00000E-08f);

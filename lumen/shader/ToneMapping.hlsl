@@ -2,12 +2,6 @@
 
 Texture2D SceneColorTexture : register(t0);
 
-SamplerState gsamPointWrap : register(s0);
-SamplerState gsamPointClamp : register(s1);
-SamplerState gsamLinearWrap : register(s2);
-SamplerState gsamLinearClamp : register(s3);
-SamplerState gsamAnisotropicWrap : register(s4);
-
 //lumen -> time/fps
 void VS(in float2 inPositionNDC : POSITION, in float2 inTexcoord : TEXCOORD,
     out float4 outPosition : SV_POSITION,

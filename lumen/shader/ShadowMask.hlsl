@@ -7,12 +7,6 @@ StructuredBuffer<float4> DFSceneObject : register(t1);
 
 RWTexture2D<float4> ShadowMaskTexture : register(u0);
 
-SamplerState gsamPointWrap : register(s0);
-SamplerState gsamPointClamp : register(s1);
-SamplerState gsamLinearWrap : register(s2);
-SamplerState gsamLinearClamp : register(s3);
-SamplerState gsamAnisotropicWrap : register(s4);
-
 //aabb ray
 float2 LineBoxIntersect(float3 RayOrigin, float3 RayEnd, float3 BoxMin, float3 BoxMax)
 {

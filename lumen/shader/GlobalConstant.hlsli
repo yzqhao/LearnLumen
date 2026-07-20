@@ -1,6 +1,10 @@
 #ifndef GLOBAL_CONSTANTS
 #define GLOBAL_CONSTANTS
 
+#include "StaticSample.hlsli"
+
+const static float PI = 3.1415926535897932f;
+
 cbuffer GlobalConstants
 {
     float4x4 mProjectionMatrix;
@@ -18,8 +22,14 @@ cbuffer GlobalConstants
     float4x4 mViewMatrixMeshCardCapture[6];//+x,-x,... axis
     float4x4 mProjectionMatrixMeshCardCapture[2];
     
-    uint4 View_StateFrameIndexMod8;//frame index mod 8
-    int4 View_NumGlobalSDFClipmaps;
+    uint View_StateFrameIndexMod8;//frame index mod 8
+	uint FrameIndex;
+	int MaxFramesAccumulated;
+	int NumTracesPerProbe;
+    int View_NumGlobalSDFClipmaps;
+	int2 RadiosityAtlasSize;
+	int FixedJitterIndex;
+
     float4 View_GlobalVolumeTranslatedCenterAndExtent[6];
     float4 View_GlobalVolumeTranslatedWorldToUVAddAndMul[6];
     float4 View_GlobalDistanceFieldMipTranslatedWorldToUVScale[6];

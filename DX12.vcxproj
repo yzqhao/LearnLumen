@@ -87,6 +87,9 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="lumen\shader\GlobalConstant.hlsli" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{C4680F18-E037-4881-A760-CF9AC4C668C5}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>

@@ -103,4 +103,9 @@
       <Filter>Resource Files\ScreenProbeGather</Filter>
     </FxCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="lumen\shader\GlobalConstant.hlsli">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
 </Project>

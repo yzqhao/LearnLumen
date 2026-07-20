@@ -1,3 +1,5 @@
+#include "../StaticSample.hlsli"
+
 ByteAddressBuffer RectCoordBuffer : register(t0);
 ByteAddressBuffer RectUVBuffer : register(t1);
 int2 select_internal(bool2   c, int2 a, int2 b) { return int2(c.x ? a.x : b.x, c.y ? a.y : b.y); }
@@ -51,11 +53,6 @@ float4 Texture2DSampleLevel(Texture2D Tex, SamplerState Sampler, float2 UV, floa
 	return Tex.SampleLevel(Sampler, UV, Mip);
 }
 Texture2D SourceAlbedoAtlas:register(t2);
-SamplerState gsamPointWrap : register(s0);
-SamplerState gsamPointClamp : register(s1);
-SamplerState gsamLinearWrap : register(s2);
-SamplerState gsamLinearClamp : register(s3);
-SamplerState gsamAnisotropicWrap : register(s4);
 
 void PS(
     float4 Position : SV_POSITION,

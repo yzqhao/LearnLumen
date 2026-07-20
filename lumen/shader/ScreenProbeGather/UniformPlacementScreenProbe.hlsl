@@ -1,7 +1,5 @@
 #include "../GlobalConstant.hlsli"
 
-const static float PI = 3.1415926535897932f;
-
 Texture2D SceneDepth:register(t0);
 Texture2D GBufferA:register(t1);
 Texture2D GBufferB:register(t2);

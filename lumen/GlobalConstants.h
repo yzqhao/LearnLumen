@@ -22,8 +22,15 @@ struct GlobalConstants
             float mViewMatrixMeshCardCapture[96];//+x,-x,... axis
             float mProjectionMatrixMeshCardCapture[32];
 
-            unsigned int View_StateFrameIndexMod8[4];//frame index mod 8
-            int View_NumGlobalSDFClipmaps[4];
+            unsigned int mFrameIndexMod8;
+            unsigned int mFrameIndex;
+            int mMaxFramesAccumulated;
+            int mNumTracesPerProbe;
+            int mView_NumGlobalSDFClipmaps;
+            int mRadiosityAtlasSize[2];
+            int mFixedJitterIndex;
+            //unsigned int View_StateFrameIndexMod8[4];//frame index mod 8
+            //int View_NumGlobalSDFClipmaps[4];
             float View_GlobalVolumeTranslatedCenterAndExtent[24];
             float View_GlobalVolumeTranslatedWorldToUVAddAndMul[24];
             float View_GlobalDistanceFieldMipTranslatedWorldToUVScale[24];

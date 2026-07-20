@@ -1,7 +1,5 @@
 #include "../GlobalConstant.hlsli"
 
-const static float PI = 3.1415926535897932f;
-
 RWTexture2D<uint> RWScreenProbeSceneDepth:register(u0);
 RWTexture2D<uint> RWScreenProbeWorldSpeed:register(u1);
 RWTexture2D<unorm float2> RWScreenProbeWorldNormal:register(u2);

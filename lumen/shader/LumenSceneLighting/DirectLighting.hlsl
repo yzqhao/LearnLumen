@@ -2,34 +2,24 @@
 
 const static float4 View_InvDeviceZToWorldZTransform=float4(0.0f,0.0f, 0.1f, -1.00000E-08f);
 //instance => sdf 
-ByteAddressBuffer RectCoordBuffer:register(t0);
-StructuredBuffer<float4> DFSceneObject:register(t1);
+Buffer<uint4> RectCoordBuffer:register(t0);
+StructuredBuffer<uint> TilesInfo:register(t1);
 Texture2D LumenCardScene_NormalAtlas:register(t2);
 Texture2D LumenCardScene_DepthAtlas:register(t3);
 StructuredBuffer<float4>  LumenCardScene_CardData:register(t4);
+Texture3D  View_GlobalDistanceFieldPageAtlasTexture:register(t5);
+Texture3D  View_GlobalDistanceFieldCoverageAtlasTexture:register(t6);
+Texture3D<uint>  View_GlobalDistanceFieldPageTableTexture:register(t7);
+Texture3D  View_GlobalDistanceFieldMipTexture:register(t8);
+Texture2D LumenCardScene_AlbedoAtlas:register(t9);
+Texture2D LumenCardScene_EmissiveAtlas:register(t10);
 
 RWTexture2D<float4> LumenSceneDirectLighting:register(u0);
 RWTexture2D<float4> LumenSceneFinalLighting:register(u1);
 
-SamplerState gsamPointWrap : register(s0);
-SamplerState gsamPointClamp : register(s1);
-SamplerState gsamLinearWrap : register(s2);
-SamplerState gsamLinearClamp : register(s3);
-SamplerState gsamAnisotropicWrap : register(s4);
-
 float length2(float2 v)
 {
 	return dot(v, v);
-}
-
-uint4 Decode(ByteAddressBuffer buf, uint InstanceId)
-{
-    uint RectCoord0 = buf.Load(InstanceId * 16u);
-    uint RectCoord1 = buf.Load(InstanceId * 16u + 4);
-    uint RectCoord2 = buf.Load(InstanceId * 16u + 8);
-    uint RectCoord3 = buf.Load(InstanceId * 16u + 12);
-    uint4 RectCoord = uint4(RectCoord0, RectCoord1, RectCoord2, RectCoord3);
-    return RectCoord;
 }
 
 struct FLumenCardData
@@ -95,6 +85,10 @@ FLumenCardData GetLumenCardData(uint CardId)
 }
 float4 Texture2DSampleLevel(Texture2D inTexture,SamplerState inSampler,float2 inTexcoord,float inMip){
     return inTexture.SampleLevel(inSampler,inTexcoord,inMip);
+}
+float4 Texture3DSampleLevel(Texture3D Tex, SamplerState Sampler, float3 UV, float Mip)
+{
+	return Tex.SampleLevel(Sampler, UV, Mip);
 }
 uint MurmurMix(uint Hash)
 {
@@ -218,61 +212,6 @@ float4x4 DFFastToTranslatedWorld(FDFInverseMatrix WorldToLocal, FDFVector3 PreVi
 {
     return DFFastMultiplyTranslationDemote(DFNegate(PreViewTranslation), WorldToLocal);
 }
-FDFObjectData LoadDFObjectDataFromBuffer(StructuredBuffer<float4> SourceBuffer, uint ObjectIndex)
-{
-    float3 PositionHigh = SourceBuffer[ObjectIndex * 10 + 0].xyz;
-    FDFObjectData Data;
-    float4 V0 = SourceBuffer[ObjectIndex * 10 + 1];
-    float4 V1 = SourceBuffer[ObjectIndex * 10 + 2];
-    float4 V2 = SourceBuffer[ObjectIndex * 10 + 3];
-    float4x4 RelativeWorldToVolume = transpose(float4x4(V0, V1, V2, float4(0.0f, 0.0f, 0.0f, 1.0f)));
-    Data.WorldToVolume = MakeDFInverseMatrix4x3(PositionHigh, RelativeWorldToVolume);
-    float4 Vector3 = SourceBuffer[ObjectIndex * 10 + 4];
-    Data.VolumePositionExtent = Vector3.xyz;
-    Data.VolumeSurfaceBias = abs(Vector3.w);
-    Data.bMostlyTwoSided = Vector3.w < 0.0f;
-    float4 Vector4 = SourceBuffer[ObjectIndex * 10 + 5];
-    Data.MinMaxDrawDistance2 = Vector4.xy;
-    Data.SelfShadowBias = Vector4.z;
-    Data.GPUSceneInstanceIndex = asuint(Vector4.w);
-    V0 = SourceBuffer[ObjectIndex * 10 + 6];
-    V1 = SourceBuffer[ObjectIndex * 10 + 7];
-    V2 = SourceBuffer[ObjectIndex * 10 + 8];
-    float4x4 VolumeToRelativeWorld = transpose(float4x4(V0, V1, V2, float4(0.0f, 0.0f, 0.0f, 1.0f)));
-    Data.VolumeToWorld = MakeDFMatrix(PositionHigh, VolumeToRelativeWorld);
-    float4 Vector8 = SourceBuffer[ObjectIndex * 10 + 9];
-    Data.VolumeToWorldScale = Vector8.xyz;
-    Data.VolumeScale = min(Data.VolumeToWorldScale.x, min(Data.VolumeToWorldScale.y, Data.VolumeToWorldScale.z));
-    Data.AssetIndex = asuint(Vector8.w);
-    return Data;
-}
-FDFObjectData LoadDFObjectData(uint ObjectIndex)
-{
-    return LoadDFObjectDataFromBuffer(DFSceneObject, ObjectIndex);
-}
-float ShadowRayTraceThroughCulledObjects(
-    float3 TranslatedWorldRayStart, 
-    float3 TranslatedWorldRayEnd)
-{
-    FDFVector3 PreViewTranslation;
-    PreViewTranslation.High=-mCameraPositionHighWS.xyz;
-    PreViewTranslation.Low=-mCameraPositionLowWS.xyz;
-    for (uint ObjectIndex = 0; ObjectIndex < 2u; ObjectIndex++)
-    {
-        FDFObjectData DFObjectData = LoadDFObjectData(ObjectIndex);
-        //asset => sdf
-        //ray from tranlated world => volume space
-        float4x4 TranslatedWorldToVolume = DFFastToTranslatedWorld(DFObjectData.WorldToVolume, PreViewTranslation);
-        float3 VolumeRayStart = mul(float4(TranslatedWorldRayStart, 1), TranslatedWorldToVolume).xyz;
-        float3 VolumeRayEnd = mul(float4(TranslatedWorldRayEnd, 1), TranslatedWorldToVolume).xyz;
-        float2 IntersectionTimes = LineBoxIntersect(VolumeRayStart, VolumeRayEnd, -DFObjectData.VolumePositionExtent, DFObjectData.VolumePositionExtent);
-        if (IntersectionTimes.x < IntersectionTimes.y)
-        {
-            return 0.0f;
-        }
-    }
-    return 1.0f;
-}
 bool IsSurfaceCacheDepthValid(float Depth)
 {
 	return Depth < 1.0f;
@@ -338,19 +277,372 @@ FLumenSurfaceCacheData GetSurfaceCacheData(FLumenCardData Card, float2 CardUV, f
 	SurfaceCacheData.WorldPosition = GetCardWorldPosition(Card, CardUV, SurfaceCacheData.Depth);
 	return SurfaceCacheData;
 }
+struct FGlobalSDFTraceInput
+{
+	float3 TranslatedWorldRayStart;
+	float3 WorldRayDirection;
+	float MinTraceDistance;
+	float MaxTraceDistance;
+	float StepFactor;
+	float MinStepFactor;
+	bool bExpandSurfaceUsingRayTimeInsteadOfMaxDistance;
+	float InitialMaxDistance;
+	float VoxelSizeRelativeBias;
+	float VoxelSizeRelativeRayEndBias;
+	bool bDitheredTransparency;
+	float2 DitherScreenCoord;
+};
+FGlobalSDFTraceInput SetupGlobalSDFTraceInput(float3 InTranslatedWorldRayStart, float3 InWorldRayDirection, float InMinTraceDistance, float InMaxTraceDistance, float InStepFactor, float InMinStepFactor)
+{
+	FGlobalSDFTraceInput TraceInput;
+	TraceInput.TranslatedWorldRayStart = InTranslatedWorldRayStart;
+	TraceInput.WorldRayDirection = InWorldRayDirection;
+	TraceInput.MinTraceDistance = InMinTraceDistance;
+	TraceInput.MaxTraceDistance = InMaxTraceDistance;
+	TraceInput.StepFactor = InStepFactor;
+	TraceInput.MinStepFactor = InMinStepFactor;
+	TraceInput.bExpandSurfaceUsingRayTimeInsteadOfMaxDistance = true;
+	TraceInput.InitialMaxDistance = 0;
+	TraceInput.VoxelSizeRelativeBias = 0.0f;
+	TraceInput.VoxelSizeRelativeRayEndBias = 0.0f;
+	TraceInput.bDitheredTransparency = false;
+	TraceInput.DitherScreenCoord = float2(0, 0);
+	return TraceInput;
+}
+float GetCardBiasForShadowing(float3 L, float3 WorldNormal, float BiasValue)
+{
+	float SurfaceBias = BiasValue;
+	float SlopeScaledSurfaceBias = 2.0f * BiasValue;
+	return SurfaceBias + SlopeScaledSurfaceBias * saturate(1 - dot(L, WorldNormal));//scale + bias
+}
+float InterleavedGradientNoise( float2 uv, float FrameId )
+{
+	uv += FrameId * (float2(47, 17) * 0.695f);
+    const float3 magic = float3( 0.06711056f, 0.00583715f, 52.9829189f );
+    return frac(magic.z * frac(dot(uv, magic.xy)));
+}
+float ComputeDistanceFromBoxToPointInside(float3 BoxCenter, float3 BoxExtent, float3 InPoint)
+{
+	float3 DistancesToMin = max(InPoint - BoxCenter + BoxExtent, 0);
+	float3 DistancesToMax = max(BoxCenter + BoxExtent - InPoint, 0);
+	float3 ClosestDistances = min(DistancesToMin, DistancesToMax);
+	return min(ClosestDistances.x, min(ClosestDistances.y, ClosestDistances.z));
+}
+uint ComputeGlobalDistanceFieldClipmapIndex(float3 TranslatedWorldPosition)
+{
+	uint FoundClipmapIndex = 0;
+	for (uint ClipmapIndex = 0; ClipmapIndex < View_NumGlobalSDFClipmaps.x; ClipmapIndex++)
+	{
+		float DistanceFromClipmap = ComputeDistanceFromBoxToPointInside(View_GlobalVolumeTranslatedCenterAndExtent[ClipmapIndex].xyz, View_GlobalVolumeTranslatedCenterAndExtent[ClipmapIndex].www, TranslatedWorldPosition);
+		if (DistanceFromClipmap > View_GlobalVolumeTranslatedCenterAndExtent[ClipmapIndex].w * View_GlobalVolumeTexelSize.x)
+		{
+			FoundClipmapIndex = ClipmapIndex;
+			break;
+		}
+	}
+	return FoundClipmapIndex;
+}
+float3 ComputeGlobalUV(float3 TranslatedWorldPosition, uint ClipmapIndex)
+{
+	float4 TranslatedWorldToUVAddAndMul = View_GlobalVolumeTranslatedWorldToUVAddAndMul[ClipmapIndex];
+	float3 UV = frac(TranslatedWorldPosition * TranslatedWorldToUVAddAndMul.www + TranslatedWorldToUVAddAndMul.xyz); 
+	UV = frac(UV); 
+	return UV;
+}
+float3 ComputeGlobalMipUV(float3 TranslatedWorldPosition, uint ClipmapIndex)
+{
+	float3 MipUV = saturate(TranslatedWorldPosition * View_GlobalDistanceFieldMipTranslatedWorldToUVScale[ClipmapIndex].xyz + View_GlobalDistanceFieldMipTranslatedWorldToUVBias[ClipmapIndex].xyz);
+	float MipUVMinZ = View_GlobalDistanceFieldMipTranslatedWorldToUVScale[ClipmapIndex].w;
+	float MipUVMaxZ = View_GlobalDistanceFieldMipTranslatedWorldToUVBias[ClipmapIndex].w;
+	MipUV.z = clamp(MipUV.z, MipUVMinZ, MipUVMaxZ);
+	return MipUV;
+}
+float DecodeGlobalDistanceFieldPageDistance(float EncodedDistance, float ClipmapInfluenceRange)
+{
+	return (EncodedDistance * 2.0f - 1.0f) * ClipmapInfluenceRange;
+}
+struct FGlobalDistanceFieldPage
+{
+	uint PageIndex;
+	bool bValid;
+	bool bCoverage;
+};
+uint3 GlobalDistanceFieldPageLinearIndexToPageAtlasOffset(FGlobalDistanceFieldPage Page)
+{
+	uint3 PageAtlasOffset;
+	PageAtlasOffset.x = Page.PageIndex & 0x7F;
+	PageAtlasOffset.y = (Page.PageIndex >> 7) & 0x7F;
+	PageAtlasOffset.z = Page.PageIndex >> 14;
+	return PageAtlasOffset;
+}
+FGlobalDistanceFieldPage UnpackGlobalDistanceFieldPage(uint PackedPage)
+{
+	FGlobalDistanceFieldPage Page;
+	Page.PageIndex = PackedPage & 0x00FFFFFF;
+	Page.bCoverage = PackedPage & 0x80000000;
+	Page.bValid = PackedPage < 0xFFFFFFFF;
+	return Page;
+}
+FGlobalDistanceFieldPage GetGlobalDistanceFieldPage(float3 VolumeUV, uint ClipmapIndex)
+{
+	int4 PageTableCoord = int4(saturate(VolumeUV) * View_GlobalDistanceFieldClipmapSizeInPages.x + int3(0, 0, ClipmapIndex * View_GlobalDistanceFieldClipmapSizeInPages.x), 0);
+	uint PackedPage = View_GlobalDistanceFieldPageTableTexture.Load(PageTableCoord);
+	return UnpackGlobalDistanceFieldPage(PackedPage);
+}
+void ComputeGlobalDistanceFieldPageUV(float3 VolumeUV, FGlobalDistanceFieldPage Page, out float3 OutPageUV, out float3 OutCoveragePageUV)
+{
+	uint3 PageAtlasOffset = GlobalDistanceFieldPageLinearIndexToPageAtlasOffset(Page);
+	float3 VolumePageUV = frac(VolumeUV * View_GlobalDistanceFieldClipmapSizeInPages.x);
+	float3 PageAtlasCoord = PageAtlasOffset * 8 + VolumePageUV * (8 - 1) + 0.5f;
+	OutPageUV = PageAtlasCoord * View_GlobalDistanceFieldInvPageAtlasSize.xyz;
+	float3 CoveragePageAtlasCoord = PageAtlasOffset * 4 + VolumePageUV * (4 - 1) + 0.5f;
+	OutCoveragePageUV = CoveragePageAtlasCoord * View_GlobalDistanceFieldInvCoverageAtlasSize.xyz;
+}
+float3 ComputeGlobalDistanceFieldPageUV(float3 VolumeUV, FGlobalDistanceFieldPage Page)
+{
+	uint3 PageAtlasOffset = GlobalDistanceFieldPageLinearIndexToPageAtlasOffset(Page);
+	float3 VolumePageUV = frac(VolumeUV * View_GlobalDistanceFieldClipmapSizeInPages.x);
+	float3 PageAtlasCoord = PageAtlasOffset * 8 + VolumePageUV * (8 - 1) + 0.5f;
+	float3 PageUV = PageAtlasCoord * View_GlobalDistanceFieldInvPageAtlasSize.xyz;
+	return PageUV;
+}
+struct FGlobalSDFTraceResult
+{
+	float HitTime;
+	uint HitClipmapIndex;
+	uint TotalStepsTaken;
+	float ExpandSurfaceAmount;
+};
+FGlobalSDFTraceResult RayTraceGlobalDistanceField(FGlobalSDFTraceInput TraceInput)
+{
+	FGlobalSDFTraceResult TraceResult;
+	TraceResult.HitTime = -1.0f;
+	TraceResult.HitClipmapIndex = 0;
+	TraceResult.TotalStepsTaken = 0;
+	TraceResult.ExpandSurfaceAmount = 0;
+	float TraceNoise = InterleavedGradientNoise(TraceInput.DitherScreenCoord.xy, View_StateFrameIndexMod8.x);
+	uint MinClipmapIndex = ComputeGlobalDistanceFieldClipmapIndex(TraceInput.TranslatedWorldRayStart + TraceInput.MinTraceDistance * TraceInput.WorldRayDirection);
+	float MaxDistance = TraceInput.InitialMaxDistance;
+	float MinRayTime = TraceInput.MinTraceDistance;
+	[loop]
+	for (uint ClipmapIndex = MinClipmapIndex; ClipmapIndex < View_NumGlobalSDFClipmaps.x && TraceResult.HitTime < 0.0f; ++ClipmapIndex)
+	{
+		float ClipmapVoxelExtent = View_GlobalVolumeTranslatedCenterAndExtent[ClipmapIndex].w * View_GlobalVolumeTexelSize.x;
+		float MinStepSize = TraceInput.MinStepFactor * ClipmapVoxelExtent;
+		float ExpandSurfaceDistance = ClipmapVoxelExtent;
+		float ClipmapRayBias = ClipmapVoxelExtent * TraceInput.VoxelSizeRelativeBias;
+		float ClipmapRayLength = TraceInput.MaxTraceDistance - ClipmapVoxelExtent * TraceInput.VoxelSizeRelativeRayEndBias;
+		float3 GlobalVolumeTranslatedCenter = View_GlobalVolumeTranslatedCenterAndExtent[ClipmapIndex].xyz;
+		float GlobalVolumeExtent = View_GlobalVolumeTranslatedCenterAndExtent[ClipmapIndex].w - ClipmapVoxelExtent;
+		float3 TranslatedWorldRayEnd = TraceInput.TranslatedWorldRayStart + TraceInput.WorldRayDirection * ClipmapRayLength;
+		float2 IntersectionTimes = LineBoxIntersect(TraceInput.TranslatedWorldRayStart, TranslatedWorldRayEnd, GlobalVolumeTranslatedCenter - GlobalVolumeExtent.xxx, GlobalVolumeTranslatedCenter + GlobalVolumeExtent.xxx);
+		IntersectionTimes.xy *= ClipmapRayLength;
+		IntersectionTimes.x = max(IntersectionTimes.x, MinRayTime);
+		IntersectionTimes.x = max(IntersectionTimes.x, ClipmapRayBias);
+		if (IntersectionTimes.x < IntersectionTimes.y)
+		{
+			MinRayTime = IntersectionTimes.y;
+			float SampleRayTime = IntersectionTimes.x;
+			const float ClipmapInfluenceRange = 4 * 2.0f * View_GlobalVolumeTranslatedCenterAndExtent[ClipmapIndex].w * View_GlobalVolumeTexelSize.x;
+			uint StepIndex = 0;
+			const uint MaxSteps = 256;
+			[loop]
+			for (; StepIndex < MaxSteps; ++StepIndex)
+			{
+				float3 SampleTranslatedWorldPosition = TraceInput.TranslatedWorldRayStart + TraceInput.WorldRayDirection * SampleRayTime;
+				float3 ClipmapVolumeUV = ComputeGlobalUV(SampleTranslatedWorldPosition, ClipmapIndex);
+				float3 MipUV = ComputeGlobalMipUV(SampleTranslatedWorldPosition, ClipmapIndex);
+				float DistanceFieldMipValue = Texture3DSampleLevel(View_GlobalDistanceFieldMipTexture,  gsamLinearClamp, MipUV, 0).x;
+				float DistanceField = DecodeGlobalDistanceFieldPageDistance(DistanceFieldMipValue, View_GlobalDistanceFieldMipFactor.x * ClipmapInfluenceRange);
+				float Coverage = 1;
+				FGlobalDistanceFieldPage Page = GetGlobalDistanceFieldPage(ClipmapVolumeUV, ClipmapIndex);
+				if (Page.bValid && DistanceFieldMipValue < View_GlobalDistanceFieldMipTransition.x)
+				{
+					float3 PageUV = ComputeGlobalDistanceFieldPageUV(ClipmapVolumeUV, Page);
+					if (Page.bCoverage)
+					{
+						float3 CoveragePageUV;
+						ComputeGlobalDistanceFieldPageUV(ClipmapVolumeUV, Page, PageUV, CoveragePageUV);
+						Coverage = Texture3DSampleLevel(View_GlobalDistanceFieldCoverageAtlasTexture,  gsamLinearWrap, CoveragePageUV, 0).x;
+					}
+					float DistanceFieldValue = Texture3DSampleLevel(View_GlobalDistanceFieldPageAtlasTexture,  gsamLinearWrap, PageUV, 0).x;
+					DistanceField = DecodeGlobalDistanceFieldPageDistance(DistanceFieldValue, ClipmapInfluenceRange);
+				}
+				MaxDistance = max(DistanceField, MaxDistance);
+				float ExpandSurfaceTime = TraceInput.bExpandSurfaceUsingRayTimeInsteadOfMaxDistance ? SampleRayTime - ClipmapRayBias : MaxDistance;
+				float ExpandSurfaceScale = lerp(View_NotCoveredExpandSurfaceScale.x, View_CoveredExpandSurfaceScale.x, Coverage);
+				const float ExpandSurfaceFalloff = 2.0f * ExpandSurfaceDistance;
+				const float ExpandSurfaceAmount = ExpandSurfaceDistance * saturate(ExpandSurfaceTime / ExpandSurfaceFalloff) * ExpandSurfaceScale;
+				float StepNoise = InterleavedGradientNoise(TraceInput.DitherScreenCoord.xy, View_StateFrameIndexMod8.x * MaxSteps + StepIndex);
+				if (DistanceField < ExpandSurfaceAmount 
+					&& (!TraceInput.bDitheredTransparency || (StepNoise * (1 - Coverage) <= View_DitheredTransparencyStepThreshold.x && TraceNoise * (1 - Coverage) <= View_DitheredTransparencyTraceThreshold.x)))
+				{
+					TraceResult.HitTime = max(SampleRayTime + DistanceField - ExpandSurfaceAmount, 0.0f);
+					TraceResult.HitClipmapIndex = ClipmapIndex;
+					TraceResult.ExpandSurfaceAmount = ExpandSurfaceAmount;
+					break;
+				}
+				float LocalMinStepSize = MinStepSize * lerp(View_NotCoveredMinStepScale.x, 1.0f, Coverage);
+				float StepDistance = max(DistanceField * TraceInput.StepFactor, LocalMinStepSize);
+				SampleRayTime += StepDistance;
+				if (SampleRayTime > IntersectionTimes.y || TraceResult.HitTime >= 0.0f)
+				{
+					break;
+				}
+			}
+			TraceResult.TotalStepsTaken += StepIndex;
+		}
+	}
+	return TraceResult;
+}
+bool GlobalSDFTraceResultIsHit(FGlobalSDFTraceResult TraceResult)
+{ 
+	return TraceResult.HitTime >= 0.0f;
+}
+float TraceOffscreenShadows(uint2 TexelCoord, float3 TranslatedWorldPosition, float3 L, float3 WorldNormal)
+{
+	float ShadowFactor = 1.0f;
+	float TraceDistance = 20000.0f;
+	float GlobalSDFShadowRayBias = 1.0f;
+    {
+		FGlobalSDFTraceInput TraceInput = SetupGlobalSDFTraceInput(TranslatedWorldPosition, L, 0.0f, TraceDistance, 1.0f, 1.0f);
+		TraceInput.VoxelSizeRelativeBias = GetCardBiasForShadowing(L, WorldNormal, GlobalSDFShadowRayBias);
+		TraceInput.DitherScreenCoord = TexelCoord;
+		FGlobalSDFTraceResult SDFResult = RayTraceGlobalDistanceField(TraceInput);
+		ShadowFactor = GlobalSDFTraceResultIsHit(SDFResult) ? 0.0f : 1.0f;
+	}
+	return ShadowFactor;
+}
+float InverseExposureLerp(float Exposure, float Alpha)
+{
+	float LerpLogScale = -Alpha * log(Exposure);
+	float Scale = exp(LerpLogScale);
+	return Scale;
+}
+uint3 Rand3DPCG16(int3 p)
+{
+	uint3 v = uint3(p);
+	v = v * 1664525u + 1013904223u;
+	v.x += v.y*v.z;
+	v.y += v.z*v.x;
+	v.z += v.x*v.y;
+	v.x += v.y*v.z;
+	v.y += v.z*v.x;
+	v.z += v.x*v.y;
+	return v >> 16u;
+}
+float2 Hammersley16( uint Index, uint NumSamples, uint2 Random )
+{
+	float E1 = frac( (float)Index / NumSamples + float( Random.x ) * (1.0 / 65536.0) );
+	float E2 = float( ( reversebits(Index) >> 16 ) ^ Random.y ) * (1.0 / 65536.0);
+	return float2( E1, E2 );
+}
+float3 QuantizeForFloatRenderTarget(float3 Color, float E, const float3 QuantizationError)
+{
+	float3 Error = Color * QuantizationError;
+	Error[0] = asfloat(asuint(Error[0]) & ~0x007FFFFF);
+	Error[1] = asfloat(asuint(Error[1]) & ~0x007FFFFF);
+	Error[2] = asfloat(asuint(Error[2]) & ~0x007FFFFF);
+	return Color + Error * E;
+}
+float3 QuantizeForFloatRenderTarget(float3 Color, float E)
+{
+	//TargetFormatQuantizationError 0.01563, 0.01563, 0.03125 192 float3
+	float3 TargetFormatQuantizationError=float3(0.01563f, 0.01563f, 0.03125f);
+	return QuantizeForFloatRenderTarget(Color, E, TargetFormatQuantizationError);
+}
+float3 QuantizeForFloatRenderTarget(float3 Color, int3 P)
+{
+	uint2 Random = Rand3DPCG16(P).xy;
+	float E = Hammersley16(0, 1, Random).x;
+	return QuantizeForFloatRenderTarget(Color, E);
+}
+float3 DecodeSurfaceCacheAlbedo(float3 EncodedAlbedo)
+{
+	float DiffuseColorBoost=1.0f;
+	float3 Albedo = EncodedAlbedo * EncodedAlbedo;
+	Albedo = min(saturate(pow(Albedo, DiffuseColorBoost)), 0.99f);
+	return Albedo;
+}
+float3 select_internal(bool3   c, float a, float3 b) { return float3(c.x ? a   : b.x, c.y ? a   : b.y, c.z ? a   : b.z); }
+bool3 IsFinite( float3 In) {	return (asuint(In) & 0x7F800000) != 0x7F800000; }
+float3 MakeFinite( float3 In) {    return  select_internal( !IsFinite(In) , 0.0 , In ); }
+
+float3 CombineFinalLighting(float3 Albedo, float3 Emissive, float3 DirectLighting, float3 IndirectLighting)
+{
+	Albedo = DecodeSurfaceCacheAlbedo(Albedo);
+	float3 DiffuseLambert = Albedo * (1 / PI);
+	float3 FinalLighting = (DirectLighting + IndirectLighting) * DiffuseLambert + Emissive;
+	FinalLighting = max(MakeFinite(FinalLighting), float3(0.0f, 0.0f, 0.0f));
+	return FinalLighting;
+}
+//tile 8x8
 //vs->ps,viewport -> rt,0~1->rt
-[numthreads(1,1,1)]
-void CS(uint3 inGroupId : SV_GroupID,//(0~11,0,0)
+[numthreads(8,8,1)]
+void CS(uint3 inGroupId : SV_GroupID,//(0~1119,0,0)
     uint3 inGroupThreadId : SV_GroupThreadID,
     uint3 inDispatchThreadId : SV_DispatchThreadID){
-    if(all(inDispatchThreadId.xy<uint2(4096,4096))){//(0~11,0)
+	uint tileIndex=inGroupId.x;
+	uint tileInfoPackedTileData = TilesInfo[tileIndex];
+	uint rectIndex=tileInfoPackedTileData & 0xFFFFFF;
+	uint4 rect=RectCoordBuffer[rectIndex];
+	uint tileCoordXInAtlas=((tileInfoPackedTileData >> 24) & 0xF)*8 + rect.x;//abs coord in atlas
+	uint tileCoordYInAtlas=((tileInfoPackedTileData >> 28) & 0xF)*8 + rect.y;
+	float width=float(rect.z-rect.x);
+	float height=float(rect.w-rect.y);
+	
+	FLumenCardData Card = GetLumenCardData(rectIndex);
+	uint2 atlasCoord = uint2(tileCoordXInAtlas + inGroupThreadId.x ,tileCoordYInAtlas + inGroupThreadId.y );
+	uint2 texelInCardPageCoord = atlasCoord - rect.xy;//uint2(x-rect.x,y-rect.y);
+	
+	float2 texcoord=(float2(texelInCardPageCoord)+float2(0.5f,0.5f))/float2(width,height);//0~1
+	float2 atlasUV=(float2(atlasCoord)+float2(0.5f,0.5f))/float2(4096.0f,4096.0f);
+
+	FLumenSurfaceCacheData SurfaceCacheData = GetSurfaceCacheData(Card, texcoord, atlasUV);
+	
+	float3 WorldNormal = SurfaceCacheData.WorldNormal;
+	float3 WorldPosition = SurfaceCacheData.WorldPosition;
+	float3 TranslatedWorldPosition = WorldPosition - (mCameraPositionHighWS.xyz+mCameraPositionLowWS.xyz);
+	float3 L = float3(-0.69466f, 0.0f, 0.71934f);
+	float3 ToLight = L;
+	float CombinedAttenuation = 1.0f;
+	float Attenuation = 1.0f;
+	float LightMask = 1.0f;
+	CombinedAttenuation *= saturate(dot(WorldNormal, L));
+	float3 color=float3(0.0f,0.0f,0.0f);
+	float3 finalLighting=float3(0.0f,0.0f,0.0f);
+	if(CombinedAttenuation>0.0f){//is lit(maybe)
+		//sdf shadow, mesh sdf
+		float shadowFactor = TraceOffscreenShadows(texelInCardPageCoord, TranslatedWorldPosition, L, WorldNormal);
+		if(shadowFactor>0.0f){
+			//pbr directional light
+			//DeferredLightData.Color = PackedLight.Color * InverseExposureLerp(Exposure, PackedLight.InverseExposureBlend);
+			float3 LightColor = float3(10.0f,10.0f,10.0f)*InverseExposureLerp(2.4f,0.0f);
+			float3 irradiance = LightColor * CombinedAttenuation;
+			color = QuantizeForFloatRenderTarget(irradiance, int3(atlasCoord, View_StateFrameIndexMod8.x + 1));
+			//
+			float3 Albedo = Texture2DSampleLevel(LumenCardScene_AlbedoAtlas, gsamLLPClamp, atlasUV, 0).xyz;
+			float3 Emissive = Texture2DSampleLevel(LumenCardScene_EmissiveAtlas, gsamLLPClamp, atlasUV, 0).xyz;
+			float3 IndirectLighting=float3(0.0f,0.0f,0.0f);
+			finalLighting = CombineFinalLighting(Albedo, Emissive, color, IndirectLighting);
+			finalLighting = QuantizeForFloatRenderTarget(finalLighting, int3(atlasCoord, View_StateFrameIndexMod8.x + 2));
+		}else{
+			//
+		}
+	}else{
+		//is in shadow
+	}
+	LumenSceneDirectLighting[atlasCoord]=float4(color,1.0f);
+	LumenSceneFinalLighting[atlasCoord]=float4(finalLighting,1.0f);
+            
+    /*if(all(inDispatchThreadId.xy<uint2(4096,4096))){//(0~11,0)
         FLumenCardData Card = GetLumenCardData(inDispatchThreadId.x);
-        uint4 rect= Decode(RectCoordBuffer, inDispatchThreadId.x);
-        float width=float(rect.z-rect.x);
-        float height=float(rect.w-rect.y);
+        uint4 rect=RectCoordBuffer[inDispatchThreadId.x];
         for(uint y=rect.y;y<rect.w;y++){
             for(uint x=rect.x;x<rect.z;x++){
                 //0~1
+				uint2 atlasCoord=uint2(x,y);
+                uint2 texelInCardPageCoord = uint2(x-rect.x,y-rect.y);
                 float2 texcoord=(float2(x-rect.x,y-rect.y)+float2(0.5f,0.5f))/float2(width,height);//0~1
                 float2 atlasUV=(float2(x,y)+float2(0.5f,0.5f))/float2(4096.0f,4096.0f);
                 FLumenSurfaceCacheData SurfaceCacheData = GetSurfaceCacheData(Card, texcoord, atlasUV);
@@ -365,12 +657,31 @@ void CS(uint3 inGroupId : SV_GroupID,//(0~11,0,0)
                 float LightMask = 1.0f;
                 CombinedAttenuation *= saturate(dot(WorldNormal, L));
                 float3 color=float3(0.0f,0.0f,0.0f);
-                if(CombinedAttenuation>0.0f){
-                    color=float3(CombinedAttenuation,CombinedAttenuation,CombinedAttenuation);
+				float3 finalLighting=float3(0.0f,0.0f,0.0f);
+                if(CombinedAttenuation>0.0f){//is lit(maybe)
+                    //sdf shadow, mesh sdf
+                    float shadowFactor = TraceOffscreenShadows(texelInCardPageCoord, TranslatedWorldPosition, L, WorldNormal);
+                    if(shadowFactor>0.0f){
+						//pbr directional light
+						//DeferredLightData.Color = PackedLight.Color * InverseExposureLerp(Exposure, PackedLight.InverseExposureBlend);
+						float3 LightColor = float3(10.0f,10.0f,10.0f)*InverseExposureLerp(2.4f,0.0f);
+						float3 irradiance = LightColor * CombinedAttenuation;
+                        color = QuantizeForFloatRenderTarget(irradiance, int3(atlasCoord, View_StateFrameIndexMod8.x + 1));
+						//
+						float3 Albedo = Texture2DSampleLevel(LumenCardScene_AlbedoAtlas, MinMagLinearMipPointClampped, atlasUV, 0).xyz;
+						float3 Emissive = Texture2DSampleLevel(LumenCardScene_EmissiveAtlas, MinMagLinearMipPointClampped, atlasUV, 0).xyz;
+						float3 IndirectLighting=float3(0.0f,0.0f,0.0f);
+						finalLighting = CombineFinalLighting(Albedo, Emissive, color, IndirectLighting);
+						finalLighting = QuantizeForFloatRenderTarget(finalLighting, int3(atlasCoord, View_StateFrameIndexMod8.x + 2));
+                    }else{
+                        //
+                    }
+                }else{
+                    //is in shadow
                 }
-                LumenSceneDirectLighting[uint2(x,y)]=float4(color,1.0f);
-                LumenSceneFinalLighting[uint2(x,y)]=float4(texcoord,0.0f,1.0f);
+                LumenSceneDirectLighting[atlasCoord]=float4(color,1.0f);
+                LumenSceneFinalLighting[atlasCoord]=float4(finalLighting,1.0f);
             }
         }
-    }
+    }*/
 }

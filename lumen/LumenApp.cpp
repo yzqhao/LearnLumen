@@ -6,7 +6,7 @@ using namespace Math;
 
 #define _4MB 4194304
 
-static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers()
+static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 7> GetStaticSamplers()
 {
     // Applications usually only need a handful of samplers.  So just define them all up front
     // and keep them available as part of the root signature.  
@@ -39,8 +39,15 @@ static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers()
         D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
         D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
 
-    const CD3DX12_STATIC_SAMPLER_DESC anisotropicWrap(
+    const CD3DX12_STATIC_SAMPLER_DESC LLPClamp(
         4, // shaderRegister
+        D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT, // filter
+        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+        D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+    const CD3DX12_STATIC_SAMPLER_DESC anisotropicWrap(
+        5, // shaderRegister
         D3D12_FILTER_ANISOTROPIC, // filter
         D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
         D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
@@ -49,7 +56,7 @@ static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers()
         8);                               // maxAnisotropy
 
     const CD3DX12_STATIC_SAMPLER_DESC anisotropicClamp(
-        5, // shaderRegister
+        6, // shaderRegister
         D3D12_FILTER_ANISOTROPIC, // filter
         D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
         D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
@@ -59,7 +66,7 @@ static std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers()
 
     return {
         pointWrap, pointClamp,
-        linearWrap, linearClamp,
+        linearWrap, linearClamp, LLPClamp,
         anisotropicWrap, anisotropicClamp };
 }
 
@@ -83,6 +90,8 @@ int GetPingPongResourceIndexCurrentFrame() {
 int GetPingPongResourceIndexLastFrame() {
     return (sPingPongResourceIndex + 1) % 2;
 }
+
+static bool sUseTemporal = false;
 
 //
 //LumenApp
@@ -317,7 +326,14 @@ void LumenApp::InitScene()
     };
     memcpy(mGlobalConstants.mProjectionMatrixMeshCardCapture + 16, &projectionMatrixMeshCardCapture1, sizeof(projectionMatrixMeshCardCapture1));
 
-    mGlobalConstants.View_NumGlobalSDFClipmaps[0] = 4;
+    mGlobalConstants.mFrameIndex = 0;
+    mGlobalConstants.mFrameIndexMod8 = 0;
+    mGlobalConstants.mMaxFramesAccumulated = 4;
+    mGlobalConstants.mNumTracesPerProbe = 16;
+    mGlobalConstants.mView_NumGlobalSDFClipmaps = 4;
+    mGlobalConstants.mRadiosityAtlasSize[0] = 4096;
+    mGlobalConstants.mRadiosityAtlasSize[1] = 4096;
+    mGlobalConstants.mFixedJitterIndex = -1;
     mGlobalConstants.View_GlobalVolumeTexelSize[0] = 0.003968f;// 0.00397f;
     mGlobalConstants.View_GlobalDistanceFieldMipFactor[0] = 4.0f;
     mGlobalConstants.View_GlobalDistanceFieldMipTransition[0] = 0.625f;
@@ -399,11 +415,6 @@ void LumenApp::OnKeyboardInput(const GameTimer& gt)
 
 void LumenApp::Update(const GameTimer& gt)
 {
-    static unsigned int frameIndex = 0u;
-    {
-        mGlobalConstants.View_StateFrameIndexMod8[0] = 7;// frameIndex++ % 8;
-    }
-
     OnKeyboardInput(gt);
     mObjectCB->CopyData(0, mGlobalConstants);
 
@@ -460,6 +471,10 @@ void LumenApp::Draw(const GameTimer& gt)
     {
         sFrameIndex++;
         sPingPongResourceIndex = sFrameIndex % 2;
+        if (sUseTemporal) {
+            mGlobalConstants.mFrameIndexMod8 = sFrameIndex % 8;
+            mGlobalConstants.mFrameIndex = sFrameIndex;
+        }
     }
 	// Reuse the memory associated with command recording.
 	// We can only reset when the associated command lists have finished execution on the GPU.

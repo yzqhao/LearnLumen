@@ -1,3 +1,5 @@
+#include "../StaticSample.hlsli"
+
 ByteAddressBuffer RectCoordBuffer : register(t0);
 ByteAddressBuffer RectUVBuffer : register(t1);
 int2 select_internal(bool2   c, int2 a, int2 b) { return int2(c.x ? a.x : b.x, c.y ? a.y : b.y); }
@@ -45,11 +47,6 @@ void VS(
 	OutRectIndex = InstanceId;
 }
 //(0.0f,0.0f,1.0f) => (0.3,0.4,0.4) => 0.3*0.3+0.4*0.4+0.4*0.4 != 1.0
-SamplerState gsamPointWrap : register(s0);
-SamplerState gsamPointClamp : register(s1);
-SamplerState gsamLinearWrap : register(s2);
-SamplerState gsamLinearClamp : register(s3);
-SamplerState gsamAnisotropicWrap : register(s4);
 void ReadBlockXY(Texture2D<float4> SourceTexture, SamplerState TextureSampler, float2 UV, float2 TexelUVSize, out float BlockX[16], out float BlockY[16])
 {
 	{
