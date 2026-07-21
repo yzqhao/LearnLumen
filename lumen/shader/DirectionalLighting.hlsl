@@ -8,8 +8,6 @@ Texture2D ShadowMaskTexture : register(t4);
 
 const static float View_MinRoughness = 0.02f;
 const static float2 DeferredLightUniforms_DistanceFadeMAD = float2(0.0002f, -9.0f);
-const static float4 View_InvDeviceZToWorldZTransform = float4(0.0f, 0.0f, 0.1f, -1.00000E-08f);
-const static float4 View_BufferSizeAndInvSize = float4(960.0f, 540.0f, 0.00104f, 0.00185f);
 const static float2 View_BufferToSceneTextureScale = float2(1.0f, 1.0f);
 struct FDirectLighting
 {

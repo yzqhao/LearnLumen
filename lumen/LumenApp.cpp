@@ -206,6 +206,9 @@ static Mat4 Perspective(float inAngle, float inAspect, float inNearZ)
 
 void LumenApp::InitScene()
 {
+    int bufferWidth = ((mClientWidth + 8 - 1) / 8) * 8;//960
+    int bufferHeight = mClientHeight;// ((inCanvasHeight + 7) / 8) * 8;//544
+
     sProjectionMatrix = Perspective(90.0f, float(mClientWidth) / float(mClientHeight), 10.0f);
     sCameraPositionHighWS = Vec4(1059.769897f, -833.207886f, 336.560120f);
     sCameraPositionLowWS = Vec4(0.000052f, 0.000010f, 0.000009f);
@@ -465,6 +468,215 @@ void LumenApp::InitScene()
         0.00f, 0.00f, 0.00f, 1.00f
     };
     memcpy(mGlobalConstants.View_GlobalDistanceFieldMipTranslatedWorldToUVBias, View_GlobalDistanceFieldMipTranslatedWorldToUVBias, sizeof(View_GlobalDistanceFieldMipTranslatedWorldToUVBias));
+    float View_ClipToPrevClip[] = {
+        1.0f,0.0f,0.0f,0.0f,
+        0.0f,1.0f,0.0f,0.0f,
+        0.0f,0.0f,1.0f,0.0f,
+        0.0f,0.0f,0.0f,1.0f
+    };
+    memcpy(mGlobalConstants.View_ClipToPrevClip, View_ClipToPrevClip, sizeof(View_ClipToPrevClip));
+    float View_PrevScreenToTranslatedWorld[] = {
+        -0.64011f,-0.768284f,0.0f,0.0f,
+        - 0.028641f,0.023863f,0.561263f,0.0f,
+        - 0.766594f,0.638702f,-0.066274f,0.0f,
+        0.0f,0.0f,0.0f,1.0f
+    };
+    memcpy(mGlobalConstants.View_PrevScreenToTranslatedWorld, View_PrevScreenToTranslatedWorld, sizeof(View_PrevScreenToTranslatedWorld));
+    {
+        int clipmapResolution = 48;
+        float clipWorldExtent = 2500.0f;
+        double level0CellSize = (double)(clipWorldExtent * 2.0f) / (double)clipmapResolution;
+        Math::Vec4 originV4 = sCameraPositionHighWS + sCameraPositionLowWS;
+        Math::Vec3 origin = Math::Vec3(originV4.x, originV4.y, originV4.z);
+        Math::Vec3 cellsPerLevel(clipmapResolution);
+        for (int clipmapLevel = 0; clipmapLevel < 4; clipmapLevel++) {
+            int dataOffset = clipmapLevel * 4;
+            Math::Vec3 cellSize = level0CellSize * powf(2.0f, (float)clipmapLevel);
+            Math::Vec3 snapUnits(floorf(origin.x/cellSize.x), floorf(origin.y / cellSize.y), floorf(origin.z / cellSize.z));
+            Math::Vec3 snapPosition = snapUnits * cellSize;
+            Math::Vec3 clipmapSize = cellSize * cellsPerLevel;
+            Math::Vec3 worldSpaceCorner = snapPosition - cellSize * 0.5f - clipmapSize/2.0f;
+            Math::Vec3 corner = worldSpaceCorner - origin;
+            float probeTMin = cellSize.Size();
+            mGlobalConstants.ClipmapCornerTWSAndCellSizeForMark[clipmapLevel].Set(corner.x, corner.y, corner.z, cellSize.x);
+            mGlobalConstants.ClipmapCornerTWSAndCellSize[clipmapLevel] = mGlobalConstants.ClipmapCornerTWSAndCellSizeForMark[clipmapLevel];
+            mGlobalConstants.RadianceProbeSettings[clipmapLevel].x = probeTMin;
+            printf("ClipmapCornerTWSAndCellSizeForMark[%f,%f,%f,%f],ProbeTMin[%f]\n", corner.x, corner.y, corner.z,cellSize.x,probeTMin);
+        }
+        mGlobalConstants.ClipmapCornerTWSAndCellSizeForMark[4].w = 1.0f;
+        mGlobalConstants.ClipmapCornerTWSAndCellSizeForMark[5].w = 1.0f;
+        mGlobalConstants.ClipmapCornerTWSAndCellSize[4] = mGlobalConstants.ClipmapCornerTWSAndCellSizeForMark[4];
+        mGlobalConstants.ClipmapCornerTWSAndCellSize[5] = mGlobalConstants.ClipmapCornerTWSAndCellSizeForMark[5];
+    }
+    float View_InvDeviceZToWorldZTransform[] = {
+        0.0f,0.0f, 0.1f, -1.00000E-08f
+    };
+    memcpy(mGlobalConstants.View_InvDeviceZToWorldZTransform, View_InvDeviceZToWorldZTransform, sizeof(View_InvDeviceZToWorldZTransform));
+    mGlobalConstants.mFrameIndex = 0;
+    mGlobalConstants.mFrameIndexMod8 = 0;
+    mGlobalConstants.mMaxFramesAccumulated = 4;
+    mGlobalConstants.mNumTracesPerProbe = 16;
+    mGlobalConstants.mHemisphereProbeResolution = 4;
+    mGlobalConstants.mProbeSpacingInRadiosityTexels = 4;
+    mGlobalConstants.mProbeSpacingInRadiosityTexelsDivideShift = 2;
+    mGlobalConstants.mRadiosityTileSize = 2;
+    mGlobalConstants.LumenCardScene_PhysicalAtlasSize[0] = 4096.0f;
+    mGlobalConstants.LumenCardScene_PhysicalAtlasSize[1] = 4096.0f;
+    mGlobalConstants.LumenCardScene_InvPhysicalAtlasSize[0] = 1.0f / 4096.0f;
+    mGlobalConstants.LumenCardScene_InvPhysicalAtlasSize[1] = 1.0f / 4096.0f;
+
+    mGlobalConstants.View_ViewRectMinAndSize[0] = 0;
+    mGlobalConstants.View_ViewRectMinAndSize[1] = 0;
+    mGlobalConstants.View_ViewRectMinAndSize[2] = bufferWidth;
+    mGlobalConstants.View_ViewRectMinAndSize[3] = bufferHeight;
+    mGlobalConstants.View_BufferSizeAndInvSize[0] = (float)bufferWidth;
+    mGlobalConstants.View_BufferSizeAndInvSize[1] = (float)bufferHeight;
+    mGlobalConstants.View_BufferSizeAndInvSize[2] = 1.0f / ((float)bufferWidth);
+    mGlobalConstants.View_BufferSizeAndInvSize[3] = 1.0f / ((float)bufferHeight);
+    mGlobalConstants.View_ScreenPositionScaleBias[0] = 0.5f;
+    mGlobalConstants.View_ScreenPositionScaleBias[1] = -0.5f;
+    mGlobalConstants.View_ScreenPositionScaleBias[2] = 0.5f;
+    mGlobalConstants.View_ScreenPositionScaleBias[3] = 0.5f;
+    mGlobalConstants.View_TemporalAAJitter[0] = 0.0f;
+    mGlobalConstants.View_TemporalAAJitter[1] = 0.0f;
+    mGlobalConstants.View_TemporalAAJitter[2] = 0.0f;
+    mGlobalConstants.View_TemporalAAJitter[3] = 0.0f;
+    mGlobalConstants.View_TemporalAAParams[0] = 0.0f;
+    mGlobalConstants.View_TemporalAAParams[1] = 1.0f;
+    mGlobalConstants.View_TemporalAAParams[2] = 0.0f;
+    mGlobalConstants.View_TemporalAAParams[3] = 0.0f;
+    mGlobalConstants.View_ViewRectMin[0] = 0.0f;
+    mGlobalConstants.View_ViewRectMin[1] = 0.0f;
+    mGlobalConstants.View_ViewRectMin[2] = 0.0f;
+    mGlobalConstants.View_ViewRectMin[3] = 0.0f;
+    mGlobalConstants.View_ViewSizeAndInvSize[0] = (float)bufferWidth;
+    mGlobalConstants.View_ViewSizeAndInvSize[1] = (float)bufferHeight;
+    mGlobalConstants.View_ViewSizeAndInvSize[2] = 1.0f / ((float)bufferWidth);
+    mGlobalConstants.View_ViewSizeAndInvSize[3] = 1.0f / ((float)bufferHeight);
+    mGlobalConstants.View_PreExposure = 2.4f;
+    mGlobalConstants.View_OneOverPreExposure = 1.0f/2.4f;
+    mGlobalConstants.View_ProjectionDepthThicknessScale = 1.0f;
+    mGlobalConstants.View_bSubsurfacePostprocessEnabled = 1.0f;
+    mGlobalConstants.ScreenProbeViewSize[0] = 60;
+    mGlobalConstants.ScreenProbeViewSize[1] = 34;
+    mGlobalConstants.ScreenProbeAtlasViewSize[0] = 60;
+    mGlobalConstants.ScreenProbeAtlasViewSize[1] = 51;
+    mGlobalConstants.ViewportTileDimensionsWithOverflow[0] = 120;
+    mGlobalConstants.ViewportTileDimensionsWithOverflow[1] = 68;
+    mGlobalConstants.InvProbeFinalRadianceAtlasResolution[0] = 0.0002298f;
+    mGlobalConstants.InvProbeFinalRadianceAtlasResolution[1] = 0.0002298f;
+    mGlobalConstants.View_bCheckerboardSubsurfaceProfileRendering = 0.0f;
+    mGlobalConstants.TargetFormatQuantizationError[0] = 0.01563f;
+    mGlobalConstants.TargetFormatQuantizationError[1] = 0.01563f;
+    mGlobalConstants.TargetFormatQuantizationError[2] = 0.03125f;
+    mGlobalConstants.ProbeHistoryScreenPositionScaleBias[0] = 0.5f;
+    mGlobalConstants.ProbeHistoryScreenPositionScaleBias[1] = -0.5f;
+    mGlobalConstants.ProbeHistoryScreenPositionScaleBias[2] = 0.5f;
+    mGlobalConstants.ProbeHistoryScreenPositionScaleBias[3] = 0.5f;
+    mGlobalConstants.ImportanceSamplingHistoryUVMinMax[0] = 0.00052083f;
+    mGlobalConstants.ImportanceSamplingHistoryUVMinMax[1] = 0.0009259f;
+    mGlobalConstants.ImportanceSamplingHistoryUVMinMax[2] = 0.99948f;
+    mGlobalConstants.ImportanceSamplingHistoryUVMinMax[3] = 0.99907f;
+    mGlobalConstants.PrevSceneColorBilinearUVMin[0] = 0.000521f;
+    mGlobalConstants.PrevSceneColorBilinearUVMin[1] = 0.000926f;
+    mGlobalConstants.PrevSceneColorBilinearUVMax[0] = 0.999479f;
+    mGlobalConstants.PrevSceneColorBilinearUVMax[1] = 0.999074f;
+    mGlobalConstants.PrevScreenPositionScaleBias[0] = 0.5f;
+    mGlobalConstants.PrevScreenPositionScaleBias[1] = -0.5f;
+    mGlobalConstants.PrevScreenPositionScaleBias[2] = 0.5f;
+    mGlobalConstants.PrevScreenPositionScaleBias[3] = 0.5f;
+    mGlobalConstants.PrevScreenPositionScaleBiasForDepth[0] = 0.5f;
+    mGlobalConstants.PrevScreenPositionScaleBiasForDepth[1] = -0.5f;
+    mGlobalConstants.PrevScreenPositionScaleBiasForDepth[2] = 0.5f;
+    mGlobalConstants.PrevScreenPositionScaleBiasForDepth[3] = 0.5f;
+    mGlobalConstants.HZBUvFactorAndInvFactor[0] = 0.9375f;
+    mGlobalConstants.HZBUvFactorAndInvFactor[1] = 0.527344f;
+    mGlobalConstants.HZBUvFactorAndInvFactor[2] = 1.066667f;
+    mGlobalConstants.HZBUvFactorAndInvFactor[3] = 1.896296f;
+    mGlobalConstants.HZBUVToScreenUVScaleBias[0] = 1.066667f;
+    mGlobalConstants.HZBUVToScreenUVScaleBias[1] = 1.896296f;
+    mGlobalConstants.HZBUVToScreenUVScaleBias[2] = 0.0f;
+    mGlobalConstants.HZBUVToScreenUVScaleBias[3] = 0.0f;
+    mGlobalConstants.HZBBaseTexelSize[0] = 0.001953f;
+    mGlobalConstants.HZBBaseTexelSize[1] = 0.001953f;
+    mGlobalConstants.SampleRadianceProbeUVMul[0] = 0.01333f;
+    mGlobalConstants.SampleRadianceProbeUVMul[1] = 0.01569f;
+    mGlobalConstants.SampleRadianceProbeUVAdd[0] = 0.00167f;
+    mGlobalConstants.SampleRadianceProbeUVAdd[1] = 0.00196f;
+    mGlobalConstants.SampleRadianceAtlasUVMul[0] = 0.01667f;
+    mGlobalConstants.SampleRadianceAtlasUVMul[1] = 0.01961f;
+    mGlobalConstants.LumenCardScene_NumMeshCards = 2;
+    mGlobalConstants.LumenCardScene_NumCards = 12;
+    mGlobalConstants.RadianceProbeClipmapResolutionForMark = 48;
+    mGlobalConstants.NumRadianceProbeClipmapsForMark = 4;
+    mGlobalConstants.RadianceProbeClipmapResolution = 48;
+    mGlobalConstants.NumRadianceProbeClipmaps = 4;
+    mGlobalConstants.MaxNumProbes = 16384;
+    mGlobalConstants.FrameNumber = 551;
+    mGlobalConstants.ForcedUniformLevel = 1;
+    mGlobalConstants.RadianceProbeResolution = 32;
+    mGlobalConstants.ProbeAtlasResolutionModuloMask = 127;
+    mGlobalConstants.ProbeAtlasResolutionDivideShift = 7;
+    mGlobalConstants.FinalProbeResolution = 34;
+    mGlobalConstants.FinalRadianceAtlasMaxMip = 0;
+    mGlobalConstants.ScreenProbeRayDirectionFrameIndex = 7;
+    mGlobalConstants.ScreenProbeTracingOctahedronResolution = 8;
+    mGlobalConstants.ScreenProbeGatherOctahedronResolution = 8;
+    mGlobalConstants.MaxImportanceSamplingOctahedronResolution = 16;
+    mGlobalConstants.ScreenProbeLightSampleResolutionXY = 2;
+    mGlobalConstants.SkipFoliageHits = 1;
+    mGlobalConstants.SkipHairHits = 1;
+    mGlobalConstants.MinimumTracingThreadOccupancy = 0;
+    mGlobalConstants.OverrideCacheOcclusionLighting = 0;
+    mGlobalConstants.ShowBlackRadianceCacheLighting = 0;
+    mGlobalConstants.ScreenProbeGatherOctahedronResolutionWithBorder = 10;
+    mGlobalConstants.DefaultDiffuseIntegrationMethod = 0;
+    mGlobalConstants.MaxClosurePerPixel = 1006;
+    mGlobalConstants.ApplyMaterialAO = 1;
+    mGlobalConstants.LumenReflectionInputIsSSR = 0;
+    mGlobalConstants.bLumenSupportBackfaceDiffuse = 1;
+    mGlobalConstants.bLumenReflectionInputIsSSR = 0;
+    mGlobalConstants.bVisualizeDiffuseIndirect = 0;
+    mGlobalConstants.DebugForceTracesMoving = 0.0f;
+    mGlobalConstants.ScreenProbeGatherMaxMip = 0.0f;
+    mGlobalConstants.MaxRoughnessToEvaluateRoughSpecularForFoliage = 0.8f;
+    mGlobalConstants.MaxRoughnessToTrace = 0.4f;
+    mGlobalConstants.MaxRoughnessToTraceForFoliage = 0.4f;
+    mGlobalConstants.InvRoughnessFadeLength = 10.0f;
+    mGlobalConstants.MaxRoughnessToEvaluateRoughSpecular = 0.8f;
+    mGlobalConstants.MaxAOMultibounceAlbedo = 0.5f;
+    mGlobalConstants.LumenFoliageOcclusionStrength = 0.7f;
+    mGlobalConstants.LumenReflectionSpecularScale = 1.0f;
+    mGlobalConstants.LumenReflectionContrast = 1.0f;
+    mGlobalConstants.FullResolutionJitterWidth = 1.0f;
+    mGlobalConstants.BlueNoise_ModuloMasks[0] = 127;
+    mGlobalConstants.BlueNoise_ModuloMasks[1] = 127;
+    mGlobalConstants.BlueNoise_ModuloMasks[2] = 63;
+    mGlobalConstants.View_StateFrameIndex = 551;
+    mGlobalConstants.BlueNoise_Dimensions[0] = 128;
+    mGlobalConstants.BlueNoise_Dimensions[1] = 128;
+    mGlobalConstants.BlueNoise_Dimensions[2] = 64;
+    mGlobalConstants.MaxHalfFloat = 65504.0f;
+    mGlobalConstants.ViewportTileDimensions[0] = 120;// 64 int2
+    mGlobalConstants.ViewportTileDimensions[1] = 68;// 64 int2
+    mGlobalConstants.CullByDistanceFromCamera = 0;
+    mGlobalConstants.CompactForFarField = 0;
+    mGlobalConstants.DiffuseColorBoost = 1.0f;
+    mGlobalConstants.CompactionTracingEndDistanceFromCamera = 0.0f;
+    mGlobalConstants.CompactionMaxTraceDistance = 340282346638528859811704183484516925440.0f;
+    mGlobalConstants.PlacementDownsampleFactor = 8u;
+
+    mGlobalConstants.HistoryScreenPositionScaleBias[0]= 0.5f;
+    mGlobalConstants.HistoryScreenPositionScaleBias[1] = -0.5f;
+    mGlobalConstants.HistoryScreenPositionScaleBias[2] = 0.5f;
+    mGlobalConstants.HistoryScreenPositionScaleBias[3] = 0.5f;
+    mGlobalConstants.HistoryUVMinMax[0] = 0.0005208f;
+    mGlobalConstants.HistoryUVMinMax[1] = 0.0009259f;
+    mGlobalConstants.HistoryUVMinMax[2] = 0.998958f;
+    mGlobalConstants.HistoryUVMinMax[3] = 0.998148f;
+    mGlobalConstants.HistoryDistanceThreshold=0.005f;
+    mGlobalConstants.InvFractionOfLightingMovingForFastUpdateMode=10.0f;
+    mGlobalConstants.MaxFastUpdateModeAmount=0.9f;
 }
 
 void LumenApp::OnMouseDown(WPARAM btnState, int x, int y)
@@ -1315,9 +1527,43 @@ void LumenApp::Draw(const GameTimer& gt)
                 PUSH_BARRIER(mLumenRadiosityProbeSHBlueAtlas, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
                 END_BARRIER(mCommandList);
             }
-            {   // DistanceFieldTracing 4x4 probes
+            {   // DistanceFieldTracing 4x4 probes (RadiosityCS)
                 SCOPED_EVENT(mCommandList, L"DistanceFieldTracing 4x4 probes");
 
+                BEGIN_BARRIER();
+                PUSH_BARRIER(mLumenRadiosityTraceRadianceAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                END_BARRIER(mCommandList);
+
+                mCommandList->SetPipelineState(mPSOs["Radiosity"]);
+                mCommandList->SetComputeRootSignature(mRootSignatures["Radiosity"]);
+
+                CD3DX12_GPU_DESCRIPTOR_HANDLE hCbv = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+                mCommandList->SetComputeRootDescriptorTable(0, hCbv);                                                  // b0
+                mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["RectCoordBufferSRV"]);                         // t0
+                mCommandList->SetComputeRootShaderResourceView(2, DirectLightTilesCB->Resource()->GetGPUVirtualAddress()); // t1 
+                mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["LumenSceneNormalSRV"]);                         // t2
+                mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["LumenSceneDepthSRV"]);                          // t3
+                mCommandList->SetComputeRootDescriptorTable(5, mGPUViews["LumenCardDataSRV"]);                            // t4
+                mCommandList->SetComputeRootDescriptorTable(6, mGPUViews["GDFPageAtlasSRV"]);                             // t5
+                mCommandList->SetComputeRootDescriptorTable(7, mGPUViews["GDFCoverageAtlasSRV"]);                         // t6
+                mCommandList->SetComputeRootDescriptorTable(8, mGPUViews["GDFPageTableSRV"]);                             // t7
+                mCommandList->SetComputeRootDescriptorTable(9, mGPUViews["GDFMipsSRV"]);                                  // t8
+                mCommandList->SetComputeRootDescriptorTable(10, mGPUViews["LumenCardSceneAlbedoAtlasSRV"]);               // t9
+                mCommandList->SetComputeRootDescriptorTable(11, mGPUViews["LumenSceneEmissiveSRV"]);                      // t10
+                mCommandList->SetComputeRootDescriptorTable(12, mGPUViews["LumenPageBufferSRV"]);                         // t11
+                mCommandList->SetComputeRootDescriptorTable(13, mGPUViews["BlueNoise_Vec2TextureSRV"]);                   // t12
+                mCommandList->SetComputeRootDescriptorTable(14, mGPUViews["GlobalDistanceFieldPageObjectGridBufferSRV"]); // t13
+                mCommandList->SetComputeRootDescriptorTable(15, mGPUViews["LumenCardScene_SceneInstanceIndexToMeshCardsIndexBufferSRV"]);// t14
+                mCommandList->SetComputeRootDescriptorTable(16, mGPUViews["LumenCardScene_MeshCardsDataSRV"]);             // t15
+                mCommandList->SetComputeRootDescriptorTable(17, mGPUViews["LumenCardScene_PageTableBufferSRV"]);           // t16
+                mCommandList->SetComputeRootDescriptorTable(18, mGPUViews["LumenSceneFinalLightingSRV"]);                  // t17
+                mCommandList->SetComputeRootDescriptorTable(19, mGPUViews["LumenRadiosityTraceRadianceAtlasUAV"]);        // u0
+
+                mCommandList->Dispatch(1120, 1, 1);
+
+                BEGIN_BARRIER();
+                PUSH_BARRIER(mLumenRadiosityTraceRadianceAtlas, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+                END_BARRIER(mCommandList);
             }
         }
     }
@@ -1926,6 +2172,41 @@ void LumenApp::BuildPSO()
         computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
         ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["DirectLighting"])));
     }
+    {   //CombineFinalLighting
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["CombineFinalLighting"];
+        computePsoDesc.CS = { reinterpret_cast<BYTE*>(mDxcByteCodes["CombineFinalLightingCS"]->GetBufferPointer()), mDxcByteCodes["CombineFinalLightingCS"]->GetBufferSize() };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["CombineFinalLighting"])));
+    }
+    {   //ConvertToSH
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["ConvertToSH"];
+        computePsoDesc.CS = { reinterpret_cast<BYTE*>(mDxcByteCodes["ConvertToSHCS"]->GetBufferPointer()), mDxcByteCodes["ConvertToSHCS"]->GetBufferSize() };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["ConvertToSH"])));
+    }
+    {   //Integrate
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["Integrate"];
+        computePsoDesc.CS = { reinterpret_cast<BYTE*>(mDxcByteCodes["IntegrateCS"]->GetBufferPointer()), mDxcByteCodes["IntegrateCS"]->GetBufferSize() };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["Integrate"])));
+    }
+    {   //Radiosity
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["Radiosity"];
+        computePsoDesc.CS = { reinterpret_cast<BYTE*>(mDxcByteCodes["RadiosityCS"]->GetBufferPointer()), mDxcByteCodes["RadiosityCS"]->GetBufferSize() };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["Radiosity"])));
+    }
+    {   //SpatialFilterProbe
+        D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
+        computePsoDesc.pRootSignature = mRootSignatures["SpatialFilterProbe"];
+        computePsoDesc.CS = { reinterpret_cast<BYTE*>(mDxcByteCodes["SpatialFilterProbeCS"]->GetBufferPointer()), mDxcByteCodes["SpatialFilterProbeCS"]->GetBufferSize() };
+        computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+        ThrowIfFailed(md3dDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&mPSOs["SpatialFilterProbe"])));
+    }
     {   //ClearScreenProbe
         D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc = {};
         computePsoDesc.pRootSignature = mRootSignatures["ClearScreenProbe"];
@@ -2155,6 +2436,7 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneNormal->mUnderlyingResource, DXGI_FORMAT_BC5_UNORM, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneAlbedo->mUnderlyingResource, DXGI_FORMAT_BC7_UNORM, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneEmissive->mUnderlyingResource, DXGI_FORMAT_BC6H_UF16, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenSceneFinalLighting->mUnderlyingResource, mLumenSceneFinalLighting->mSRVFormat, 0);
     //DirectLighting SRVs (t0-t10): RectCoordBuffer, TilesInfo, NormalAtlas, DepthAtlas, CardData, GDF textures, Albedo/Emissive atlases
     {
         D3D12_RESOURCE_DESC rectBufDesc = mRectDataBuffer->mUnderlyingResource->GetDesc();
@@ -2164,12 +2446,21 @@ void LumenApp::BuildDescriptorHeaps()
         D3D12_RESOURCE_DESC cardBufDesc = mLumenCards->mUnderlyingResource->GetDesc();
         CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCards->mUnderlyingResource, cardBufDesc.Width, sizeof(float) * 4);
     }
+    CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenPageBuffer->mUnderlyingResource, mLumenPageBuffer->mUnderlyingResource->GetDesc().Width, sizeof(float) * 4);
+    CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGlobalDistanceFieldPageObjectGridBuffer->mUnderlyingResource, mGlobalDistanceFieldPageObjectGridBuffer->mUnderlyingResource->GetDesc().Width, sizeof(float) * 4);
+    CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardScene_SceneInstanceIndexToMeshCardsIndexBuffer->mUnderlyingResource, mLumenCardScene_SceneInstanceIndexToMeshCardsIndexBuffer->mUnderlyingResource->GetDesc().Width, sizeof(float) * 4);
+    CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardScene_MeshCardsData->mUnderlyingResource, mLumenCardScene_MeshCardsData->mUnderlyingResource->GetDesc().Width, sizeof(float) * 4);
+    CreateBufferSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardScene_PageTableBuffer->mUnderlyingResource, mLumenCardScene_PageTableBuffer->mUnderlyingResource->GetDesc().Width, sizeof(float) * 4);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mBlueNoise_Vec2Texture->mUnderlyingResource, mBlueNoise_Vec2Texture->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mBlueNoise_ScalarTexture->mUnderlyingResource, mBlueNoise_ScalarTexture->mSRVFormat, 0);
     CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFPageAtlas->mUnderlyingResource, mGSDFPageAtlas->mSRVFormat);
     CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFCoverageAtlas->mUnderlyingResource, mGSDFCoverageAtlas->mSRVFormat);
     CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFPageTable->mUnderlyingResource, mGSDFPageTable->mSRVFormat);
     CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mGSDFMips->mUnderlyingResource, mGSDFMips->mSRVFormat);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureAlbedoAtlas->mUnderlyingResource, mLumenCardCaptureAlbedoAtlas->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mUnderlyingResource, mLumenCardCaptureEmissiveAtlas->mSRVFormat, 0);
+    CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityTraceRadianceAtlas->mSRVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityTraceRadianceAtlas->mRTVFormat, 0);
     //ScreenProbe
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mSRVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mRTVFormat, 0);
@@ -2236,15 +2527,25 @@ void LumenApp::BuildDescriptorHeaps()
     mCPUViews["LumenSceneNormalSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneAlbedoSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenSceneEmissiveSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenSceneFinalLightingSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     //DirectLighting SRVs (t0-t10)
     mCPUViews["RectCoordBufferSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenCardDataSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenPageBufferSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["GlobalDistanceFieldPageObjectGridBufferSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardScene_SceneInstanceIndexToMeshCardsIndexBufferSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardScene_MeshCardsDataSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenCardScene_PageTableBufferSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["BlueNoise_Vec2TextureSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["BlueNoise_ScalarTextureSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GDFPageAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GDFCoverageAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GDFPageTableSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GDFMipsSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenCardSceneAlbedoAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["LumenCardSceneEmissiveAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenRadiosityTraceRadianceAtlasSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["LumenRadiosityTraceRadianceAtlasUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     //ScreenProbe
     mCPUViews["ScreenProbeSceneDepthSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["ScreenProbeSceneDepthUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -2311,15 +2612,25 @@ void LumenApp::BuildDescriptorHeaps()
     mGPUViews["LumenSceneNormalSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenSceneAlbedoSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenSceneEmissiveSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenSceneFinalLightingSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     //DirectLighting SRVs (t0-t10)
     mGPUViews["RectCoordBufferSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenCardDataSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenPageBufferSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["GlobalDistanceFieldPageObjectGridBufferSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardScene_SceneInstanceIndexToMeshCardsIndexBufferSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardScene_MeshCardsDataSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenCardScene_PageTableBufferSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["BlueNoise_Vec2TextureSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["BlueNoise_ScalarTextureSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["GDFPageAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["GDFCoverageAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["GDFPageTableSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["GDFMipsSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenCardSceneAlbedoAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenCardSceneEmissiveAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenRadiosityTraceRadianceAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenRadiosityTraceRadianceAtlasUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     //ScreenProbe
     mGPUViews["ScreenProbeSceneDepthSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["ScreenProbeSceneDepthUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -2585,6 +2896,186 @@ void LumenApp::BuildRootSignature()
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["DirectionalLighting"])));
     }
+    {   //CombineFinalLighting
+        CD3DX12_DESCRIPTOR_RANGE cbv0; cbv0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s0; s0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s1; s1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE s2; s2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE s3; s3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE s4; s4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE s5; s5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE s6; s6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE s7; s7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE u0; u0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_ROOT_PARAMETER rp[10];
+        rp[0].InitAsDescriptorTable(1, &cbv0);
+        rp[1].InitAsDescriptorTable(1, &s0);
+        rp[2].InitAsDescriptorTable(1, &s1);
+        rp[3].InitAsDescriptorTable(1, &s2);
+        rp[4].InitAsDescriptorTable(1, &s3);
+        rp[5].InitAsDescriptorTable(1, &s4);
+        rp[6].InitAsDescriptorTable(1, &s5);
+        rp[7].InitAsDescriptorTable(1, &s6);
+        rp[8].InitAsDescriptorTable(1, &s7);
+        rp[9].InitAsDescriptorTable(1, &u0);
+        auto ss = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rsd(10, rp, ss.size(), ss.data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        ID3DBlob* sig = nullptr; ID3DBlob* err = nullptr;
+        ThrowIfFailed(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err));
+        if (err) { OutputDebugStringA((char*)err->GetBufferPointer()); err->Release(); }
+        ThrowIfFailed(md3dDevice->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), IID_PPV_ARGS(&mRootSignatures["CombineFinalLighting"])));
+        sig->Release();
+    }
+    {   //ConvertToSH
+        CD3DX12_DESCRIPTOR_RANGE cbv0; cbv0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s0; s0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s1; s1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE s2; s2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE s3; s3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE s4; s4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE s5; s5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE s6; s6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE s7; s7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE u0; u0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE u1; u1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE u2; u2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
+        CD3DX12_ROOT_PARAMETER rp[12];
+        rp[0].InitAsDescriptorTable(1, &cbv0);
+        rp[1].InitAsDescriptorTable(1, &s0);
+        rp[2].InitAsDescriptorTable(1, &s1);
+        rp[3].InitAsDescriptorTable(1, &s2);
+        rp[4].InitAsDescriptorTable(1, &s3);
+        rp[5].InitAsDescriptorTable(1, &s4);
+        rp[6].InitAsDescriptorTable(1, &s5);
+        rp[7].InitAsDescriptorTable(1, &s6);
+        rp[8].InitAsDescriptorTable(1, &s7);
+        rp[9].InitAsDescriptorTable(1, &u0);
+        rp[10].InitAsDescriptorTable(1, &u1);
+        rp[11].InitAsDescriptorTable(1, &u2);
+        auto ss = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rsd(12, rp, ss.size(), ss.data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        ID3DBlob* sig = nullptr; ID3DBlob* err = nullptr;
+        ThrowIfFailed(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err));
+        if (err) { OutputDebugStringA((char*)err->GetBufferPointer()); err->Release(); }
+        ThrowIfFailed(md3dDevice->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), IID_PPV_ARGS(&mRootSignatures["ConvertToSH"])));
+        sig->Release();
+    }
+    {   //Integrate
+        CD3DX12_DESCRIPTOR_RANGE cbv0; cbv0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s0; s0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s1; s1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE s2; s2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE s3; s3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE s4; s4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE s5; s5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE s6; s6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE s7; s7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE s8; s8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 8);
+        CD3DX12_DESCRIPTOR_RANGE u0; u0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE u1; u1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_ROOT_PARAMETER rp[12];
+        rp[0].InitAsDescriptorTable(1, &cbv0);
+        rp[1].InitAsDescriptorTable(1, &s0);
+        rp[2].InitAsDescriptorTable(1, &s1);
+        rp[3].InitAsDescriptorTable(1, &s2);
+        rp[4].InitAsDescriptorTable(1, &s3);
+        rp[5].InitAsDescriptorTable(1, &s4);
+        rp[6].InitAsDescriptorTable(1, &s5);
+        rp[7].InitAsDescriptorTable(1, &s6);
+        rp[8].InitAsDescriptorTable(1, &s7);
+        rp[9].InitAsDescriptorTable(1, &s8);
+        rp[10].InitAsDescriptorTable(1, &u0);
+        rp[11].InitAsDescriptorTable(1, &u1);
+        auto ss = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rsd(12, rp, ss.size(), ss.data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        ID3DBlob* sig = nullptr; ID3DBlob* err = nullptr;
+        ThrowIfFailed(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err));
+        if (err) { OutputDebugStringA((char*)err->GetBufferPointer()); err->Release(); }
+        ThrowIfFailed(md3dDevice->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), IID_PPV_ARGS(&mRootSignatures["Integrate"])));
+        sig->Release();
+    }
+    {   //Radiosity
+        CD3DX12_DESCRIPTOR_RANGE cbv0; cbv0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s0; s0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s1; s1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE s2; s2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE s3; s3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE s4; s4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE s5; s5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE s6; s6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE s7; s7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE s8; s8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 8);
+        CD3DX12_DESCRIPTOR_RANGE s9; s9.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 9);
+        CD3DX12_DESCRIPTOR_RANGE s10; s10.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 10);
+        CD3DX12_DESCRIPTOR_RANGE s11; s11.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 11);
+        CD3DX12_DESCRIPTOR_RANGE s12; s12.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 12);
+        CD3DX12_DESCRIPTOR_RANGE s13; s13.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 13);
+        CD3DX12_DESCRIPTOR_RANGE s14; s14.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 14);
+        CD3DX12_DESCRIPTOR_RANGE s15; s15.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 15);
+        CD3DX12_DESCRIPTOR_RANGE s16; s16.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 16);
+        CD3DX12_DESCRIPTOR_RANGE s17; s17.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 17);
+        CD3DX12_DESCRIPTOR_RANGE u0; u0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_ROOT_PARAMETER rp[20];
+        rp[0].InitAsDescriptorTable(1, &cbv0);
+        rp[1].InitAsDescriptorTable(1, &s0);
+        rp[2].InitAsShaderResourceView(1);
+        rp[3].InitAsDescriptorTable(1, &s2);
+        rp[4].InitAsDescriptorTable(1, &s3);
+        rp[5].InitAsDescriptorTable(1, &s4);
+        rp[6].InitAsDescriptorTable(1, &s5);
+        rp[7].InitAsDescriptorTable(1, &s6);
+        rp[8].InitAsDescriptorTable(1, &s7);
+        rp[9].InitAsDescriptorTable(1, &s8);
+        rp[10].InitAsDescriptorTable(1, &s9);
+        rp[11].InitAsDescriptorTable(1, &s10);
+        rp[12].InitAsDescriptorTable(1, &s11);
+        rp[13].InitAsDescriptorTable(1, &s12);
+        rp[14].InitAsDescriptorTable(1, &s13);
+        rp[15].InitAsDescriptorTable(1, &s14);
+        rp[16].InitAsDescriptorTable(1, &s15);
+        rp[17].InitAsDescriptorTable(1, &s16);
+        rp[18].InitAsDescriptorTable(1, &s17);
+        rp[19].InitAsDescriptorTable(1, &u0);
+        auto ss = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rsd(20, rp, ss.size(), ss.data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        ID3DBlob* sig = nullptr; ID3DBlob* err = nullptr;
+        ThrowIfFailed(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err));
+        if (err) { OutputDebugStringA((char*)err->GetBufferPointer()); err->Release(); }
+        ThrowIfFailed(md3dDevice->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), IID_PPV_ARGS(&mRootSignatures["Radiosity"])));
+        sig->Release();
+    }
+    {   //SpatialFilterProbe
+        CD3DX12_DESCRIPTOR_RANGE cbv0; cbv0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s0; s0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE s1; s1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE s2; s2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE s3; s3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE s4; s4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE s5; s5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE s6; s6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE s7; s7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE u0; u0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE u1; u1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_ROOT_PARAMETER rp[11];
+        rp[0].InitAsDescriptorTable(1, &cbv0);
+        rp[1].InitAsDescriptorTable(1, &s0);
+        rp[2].InitAsDescriptorTable(1, &s1);
+        rp[3].InitAsDescriptorTable(1, &s2);
+        rp[4].InitAsDescriptorTable(1, &s3);
+        rp[5].InitAsDescriptorTable(1, &s4);
+        rp[6].InitAsDescriptorTable(1, &s5);
+        rp[7].InitAsDescriptorTable(1, &s6);
+        rp[8].InitAsDescriptorTable(1, &s7);
+        rp[9].InitAsDescriptorTable(1, &u0);
+        rp[10].InitAsDescriptorTable(1, &u1);
+        auto ss = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rsd(11, rp, ss.size(), ss.data(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+        ID3DBlob* sig = nullptr; ID3DBlob* err = nullptr;
+        ThrowIfFailed(D3D12SerializeRootSignature(&rsd, D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err));
+        if (err) { OutputDebugStringA((char*)err->GetBufferPointer()); err->Release(); }
+        ThrowIfFailed(md3dDevice->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), IID_PPV_ARGS(&mRootSignatures["SpatialFilterProbe"])));
+        sig->Release();
+    }
     {   //ToneMap
         CD3DX12_DESCRIPTOR_RANGE srvTable0;
         srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
@@ -2770,41 +3261,25 @@ void LumenApp::BuildRootSignature()
             IID_PPV_ARGS(&mRootSignatures["CopyToSurfaceCacheOpacity"])));
     }
     {   //DirectLighting
-        CD3DX12_DESCRIPTOR_RANGE uavTable0;
-        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE uavTable1;
-        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0; uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1; uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
 
-        CD3DX12_DESCRIPTOR_RANGE srvTable0;
-        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE srvTable1;
-        srvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
-        CD3DX12_DESCRIPTOR_RANGE srvTable2;
-        srvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
-        CD3DX12_DESCRIPTOR_RANGE srvTable3;
-        srvTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
-        CD3DX12_DESCRIPTOR_RANGE srvTable4;
-        srvTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
-        CD3DX12_DESCRIPTOR_RANGE srvTable5;
-        srvTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
-        CD3DX12_DESCRIPTOR_RANGE srvTable6;
-        srvTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
-        CD3DX12_DESCRIPTOR_RANGE srvTable7;
-        srvTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
-        CD3DX12_DESCRIPTOR_RANGE srvTable8;
-        srvTable8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 8);
-        CD3DX12_DESCRIPTOR_RANGE srvTable9;
-        srvTable9.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 9);
-        CD3DX12_DESCRIPTOR_RANGE srvTable10;
-        srvTable10.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 10);
+        CD3DX12_DESCRIPTOR_RANGE srvTable0; srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable2; srvTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE srvTable3; srvTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE srvTable4; srvTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE srvTable5; srvTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE srvTable6; srvTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE srvTable7; srvTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE srvTable8; srvTable8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 8);
+        CD3DX12_DESCRIPTOR_RANGE srvTable9; srvTable9.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 9);
+        CD3DX12_DESCRIPTOR_RANGE srvTable10; srvTable10.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 10);
 
-        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
-        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0; cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[14];
         slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);             // b0
         slotRootParameter[1].InitAsDescriptorTable(1, &srvTable0);             // t0 RectCoordBuffer
-        //slotRootParameter[2].InitAsDescriptorTable(1, &srvTable1);             // t1 TilesInfo
         slotRootParameter[2].InitAsShaderResourceView(1);
         slotRootParameter[3].InitAsDescriptorTable(1, &srvTable2);             // t2 NormalAtlas
         slotRootParameter[4].InitAsDescriptorTable(1, &srvTable3);             // t3 DepthAtlas
@@ -2841,28 +3316,17 @@ void LumenApp::BuildRootSignature()
             IID_PPV_ARGS(&mRootSignatures["DirectLighting"])));
     }
     {   //ClearScreenProbe
-        CD3DX12_DESCRIPTOR_RANGE uavTable0;
-        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE uavTable1;
-        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
-        CD3DX12_DESCRIPTOR_RANGE uavTable2;
-        uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
-        CD3DX12_DESCRIPTOR_RANGE uavTable3;
-        uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
-        CD3DX12_DESCRIPTOR_RANGE uavTable4;
-        uavTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 4);
-        CD3DX12_DESCRIPTOR_RANGE uavTable5;
-        uavTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 5);
-        CD3DX12_DESCRIPTOR_RANGE uavTable6;
-        uavTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
-        CD3DX12_DESCRIPTOR_RANGE uavTable7;
-        uavTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 7);
-        CD3DX12_DESCRIPTOR_RANGE uavTable8;
-        uavTable8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 8);
-        CD3DX12_DESCRIPTOR_RANGE uavTable9;
-        uavTable9.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 9);
-        CD3DX12_DESCRIPTOR_RANGE uavTable10;
-        uavTable10.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 10);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0; uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1; uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE uavTable2; uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE uavTable3; uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE uavTable4; uavTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE uavTable5; uavTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE uavTable6; uavTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE uavTable7; uavTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE uavTable8; uavTable8.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 8);
+        CD3DX12_DESCRIPTOR_RANGE uavTable9; uavTable9.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 9);
+        CD3DX12_DESCRIPTOR_RANGE uavTable10; uavTable10.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 10);
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[11];
         slotRootParameter[0].InitAsDescriptorTable(1, &uavTable0);
@@ -2899,12 +3363,9 @@ void LumenApp::BuildRootSignature()
             IID_PPV_ARGS(&mRootSignatures["ClearScreenProbe"])));
     }
     {   //HZB_UAV1
-        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
-        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE srvTable0;
-        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE uavTable0;
-        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0; cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable0; srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0; uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[3];
         slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
@@ -2933,26 +3394,16 @@ void LumenApp::BuildRootSignature()
             IID_PPV_ARGS(&mRootSignatures["HZB_UAV1"])));
     }
     {   //HZB_UAV8
-        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
-        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE srvTable0;
-        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE uavTable0;
-        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE uavTable1;
-        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
-        CD3DX12_DESCRIPTOR_RANGE uavTable2;
-        uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
-        CD3DX12_DESCRIPTOR_RANGE uavTable3;
-        uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
-        CD3DX12_DESCRIPTOR_RANGE uavTable4;
-        uavTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 4);
-        CD3DX12_DESCRIPTOR_RANGE uavTable5;
-        uavTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 5);
-        CD3DX12_DESCRIPTOR_RANGE uavTable6;
-        uavTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
-        CD3DX12_DESCRIPTOR_RANGE uavTable7;
-        uavTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 7);
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0; cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable0; srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0; uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1; uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE uavTable2; uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE uavTable3; uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE uavTable4; uavTable4.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 4);
+        CD3DX12_DESCRIPTOR_RANGE uavTable5; uavTable5.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 5);
+        CD3DX12_DESCRIPTOR_RANGE uavTable6; uavTable6.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 6);
+        CD3DX12_DESCRIPTOR_RANGE uavTable7; uavTable7.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 7);
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[10];
         slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
@@ -2989,18 +3440,12 @@ void LumenApp::BuildRootSignature()
     }
     
     {   //HZB_UAV4
-        CD3DX12_DESCRIPTOR_RANGE cbvTable0;
-        cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE srvTable0;
-        srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE uavTable0;
-        uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
-        CD3DX12_DESCRIPTOR_RANGE uavTable1;
-        uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
-        CD3DX12_DESCRIPTOR_RANGE uavTable2;
-        uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
-        CD3DX12_DESCRIPTOR_RANGE uavTable3;
-        uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
+        CD3DX12_DESCRIPTOR_RANGE cbvTable0; cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE srvTable0; srvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable0; uavTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+        CD3DX12_DESCRIPTOR_RANGE uavTable1; uavTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 1);
+        CD3DX12_DESCRIPTOR_RANGE uavTable2; uavTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 2);
+        CD3DX12_DESCRIPTOR_RANGE uavTable3; uavTable3.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 3);
 
         CD3DX12_ROOT_PARAMETER slotRootParameter[6];
         slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
@@ -3090,11 +3535,24 @@ void LumenApp::BuildBuffers()
         mCubeAttributeBuffer = InitBufferFromFile(L"CubeAttribute", "Res/TangentAndNormal.data");
         mDFSceneObject = InitBufferFromFile(L"DistanceFields.DFObjectData", "Res/DistanceFields.DFObjectData.data");
         mLumenCards = InitBufferFromFile(L"Lumen.Cards", "Res/Lumen.Cards.data");
+        mLumenPageBuffer = InitBufferFromFile(L"Lumen.PageBuffer","Res/Lumen.PageBuffer.data");
 
         mGSDFPageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.PageAtlas.dds");
         mGSDFCoverageAtlas = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.CoverageAtlas.dds");
         mGSDFPageTable = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.PageTableCombinedAtlas.dds");
         mGSDFMips = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/GlobalDistanceField.SDFMips.dds");
+
+        mBlueNoise_Vec2Texture = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/FastBlueNoise_vec2_128x128x64.dds");
+        mBlueNoise_Vec2Texture->mUnderlyingResource->SetName(L"FastBlueNoise_vec2_128x128x64");
+        mBlueNoise_ScalarTexture = D3DImage::InitTextureFromFile(md3dDevice, mCommandList, L"Res/FastBlueNoise_scalar_128x128x64.dds");
+        mBlueNoise_ScalarTexture->mUnderlyingResource->SetName(L"FastBlueNoise_scalar_128x128x64");
+
+        mGlobalDistanceFieldPageObjectGridBuffer = InitBufferFromFile(L"GlobalDistanceField.PageObjectGridBuffer",
+                "Res/GlobalDistanceField.PageObjectGridBuffer.Simplified.data");
+        mLumenCardScene_SceneInstanceIndexToMeshCardsIndexBuffer = InitBufferFromFile(L"Lumen.SceneInstanceIndexToMeshCardsIndexBuffer",
+                "Res/Lumen.SceneInstanceIndexToMeshCardsIndexBuffer.data");
+        mLumenCardScene_MeshCardsData = InitBufferFromFile(L"Lumen.MeshCards","Res/Lumen.MeshCards.data");
+        mLumenCardScene_PageTableBuffer = InitBufferFromFile(L"Lumen.PageTable","Res/Lumen.PageTable.data");
     }
     {   // HZB
         mHZBFurthest = Init2DRTImage(md3dDevice, mCommandList, 512, 512, 0,

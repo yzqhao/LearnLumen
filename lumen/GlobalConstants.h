@@ -1,9 +1,11 @@
 #pragma once
 
 #include "../common/d3dUtil.h"
+#include "../math/Vec4.h"
 
 struct GlobalConstants
 {
+    GlobalConstants() { memset(mData, 0, sizeof(mData)); }
     union {
         struct {
             float mProjectionMatrix[16];
@@ -77,6 +79,109 @@ struct GlobalConstants
 
             float View_GlobalDistanceFieldInvPageAtlasSize[4];
             float View_GlobalDistanceFieldInvCoverageAtlasSize[4];
+            
+            float View_ClipToPrevClip[16];
+            float View_PrevScreenToTranslatedWorld[16];
+            Math::Vec4 ClipmapCornerTWSAndCellSizeForMark[6];
+            Math::Vec4 ClipmapCornerTWSAndCellSize[6];
+            Math::Vec4 RadianceProbeSettings[6];
+            float View_InvDeviceZToWorldZTransform[4];//float4(0.0f,0.0f, 0.1f, -1.00000E-08f)
+            int mHemisphereProbeResolution;
+            int mProbeSpacingInRadiosityTexels;
+            int mProbeSpacingInRadiosityTexelsDivideShift;
+            int mRadiosityTileSize;
+            float LumenCardScene_PhysicalAtlasSize[2];
+            float LumenCardScene_InvPhysicalAtlasSize[2];
+            int View_ViewRectMinAndSize[4];
+            float View_BufferSizeAndInvSize[4];
+            float View_ScreenPositionScaleBias[4];
+            float View_TemporalAAJitter[4];
+            float View_TemporalAAParams[4];
+            float View_ViewRectMin[4];
+            float View_ViewSizeAndInvSize[4];
+            float View_PreExposure;
+            float View_OneOverPreExposure;
+            float View_ProjectionDepthThicknessScale;
+            float View_bSubsurfacePostprocessEnabled;
+            unsigned int ScreenProbeViewSize[2];
+            unsigned int ScreenProbeAtlasViewSize[2];
+            int ViewportTileDimensionsWithOverflow[2];
+            float InvProbeFinalRadianceAtlasResolution[2];
+            float View_bCheckerboardSubsurfaceProfileRendering;
+            float TargetFormatQuantizationError[3];
+            float ProbeHistoryScreenPositionScaleBias[4];
+            float ImportanceSamplingHistoryUVMinMax[4];
+            float PrevSceneColorBilinearUVMin[2];
+            float PrevSceneColorBilinearUVMax[2];
+            float PrevScreenPositionScaleBias[4];
+            float PrevScreenPositionScaleBiasForDepth[4];
+            float HZBUvFactorAndInvFactor[4];
+            float HZBUVToScreenUVScaleBias[4];
+            float HZBBaseTexelSize[2];
+            float SampleRadianceProbeUVMul[2];
+            float SampleRadianceProbeUVAdd[2];
+            float SampleRadianceAtlasUVMul[2];
+            int LumenCardScene_NumMeshCards;
+            int LumenCardScene_NumCards;
+            int RadianceProbeClipmapResolutionForMark;
+            int NumRadianceProbeClipmapsForMark;
+            int RadianceProbeClipmapResolution;
+            int NumRadianceProbeClipmaps;
+            int MaxNumProbes;
+            int FrameNumber;
+            int ForcedUniformLevel;
+            int RadianceProbeResolution;
+            int ProbeAtlasResolutionModuloMask;
+            int ProbeAtlasResolutionDivideShift;
+            int FinalProbeResolution;
+            int FinalRadianceAtlasMaxMip;
+            int ScreenProbeRayDirectionFrameIndex;
+            int ScreenProbeTracingOctahedronResolution;
+            int ScreenProbeGatherOctahedronResolution;
+            int MaxImportanceSamplingOctahedronResolution;
+            int ScreenProbeLightSampleResolutionXY;
+            int SkipFoliageHits;
+            int SkipHairHits;
+            int MinimumTracingThreadOccupancy;
+            int OverrideCacheOcclusionLighting;
+            int ShowBlackRadianceCacheLighting;
+            int ScreenProbeGatherOctahedronResolutionWithBorder;
+            int DefaultDiffuseIntegrationMethod;
+            int MaxClosurePerPixel;
+            int ApplyMaterialAO;
+            int LumenReflectionInputIsSSR;
+            int bLumenSupportBackfaceDiffuse;
+            int bLumenReflectionInputIsSSR;
+            int bVisualizeDiffuseIndirect;
+            float DebugForceTracesMoving;
+            float ScreenProbeGatherMaxMip;
+            float MaxRoughnessToEvaluateRoughSpecularForFoliage;
+            float MaxRoughnessToTrace;
+            float MaxRoughnessToTraceForFoliage;
+            float InvRoughnessFadeLength;
+            float MaxRoughnessToEvaluateRoughSpecular;
+            float MaxAOMultibounceAlbedo;
+            float LumenFoliageOcclusionStrength;
+            float LumenReflectionSpecularScale;
+            float LumenReflectionContrast;
+            float FullResolutionJitterWidth;
+            int BlueNoise_ModuloMasks[3];
+            int View_StateFrameIndex;
+            int BlueNoise_Dimensions[3];
+            float MaxHalfFloat;
+            int ViewportTileDimensions[2];// 64 int2
+            int CullByDistanceFromCamera;
+            int CompactForFarField;
+            unsigned int PlacementDownsampleFactor;
+            float DiffuseColorBoost;
+            float CompactionTracingEndDistanceFromCamera;
+            float CompactionMaxTraceDistance;
+            float HistoryScreenPositionScaleBias[4];
+            float HistoryUVMinMax[4];
+            float HistoryDistanceThreshold;
+            float InvFractionOfLightingMovingForFastUpdateMode;
+            float MaxFastUpdateModeAmount;
+            float reserved;
         };
         float mData[1024];
     };

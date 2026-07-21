@@ -1,6 +1,5 @@
 #include "GlobalConstant.hlsli"
 
-const static float4 View_InvDeviceZToWorldZTransform = float4(0.0f, 0.0f, 0.1f, -1.00000E-08f);
 //instance => sdf 
 Texture2D SceneDepthTexture : register(t0);
 StructuredBuffer<float4> DFSceneObject : register(t1);

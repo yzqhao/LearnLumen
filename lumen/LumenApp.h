@@ -66,6 +66,7 @@ private:
     D3DResource* mCubeAttributeBuffer;
     D3DResource* mDFSceneObject;
     D3DResource* mLumenCards;
+    D3DResource* mLumenPageBuffer;
     D3DResource* mClearCardBuffer;
     D3DResource* mRectDataBuffer;
     D3DResource* mRectUVBuffer;
@@ -115,7 +116,13 @@ private:
     D3DImage* mLumenScreenProbeGatherTraceRadiance;
     D3DImage* mLumenScreenProbeGatherScreenProbeHitDistance;
     D3DImage* mLumenScreenProbeGatherScreenProbeTraceMoving;
+    D3DImage* mBlueNoise_Vec2Texture;
+    D3DResource* mGlobalDistanceFieldPageObjectGridBuffer;
+    D3DResource* mLumenCardScene_SceneInstanceIndexToMeshCardsIndexBuffer;
+    D3DResource* mLumenCardScene_MeshCardsData;
+    D3DResource* mLumenCardScene_PageTableBuffer;
     //lumen screen space
+    D3DImage* mBlueNoise_ScalarTexture;
     D3DImage* mScreenProbeSceneDepth;
     D3DImage* mScreenProbeWorldSpeed;
     D3DImage* mScreenProbeWorldNormal;

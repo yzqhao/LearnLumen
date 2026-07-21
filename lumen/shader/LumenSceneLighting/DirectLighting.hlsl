@@ -1,6 +1,5 @@
 #include "../GlobalConstant.hlsli"
 
-const static float4 View_InvDeviceZToWorldZTransform=float4(0.0f,0.0f, 0.1f, -1.00000E-08f);
 //instance => sdf 
 Buffer<uint4> RectCoordBuffer:register(t0);
 StructuredBuffer<uint> TilesInfo:register(t1);
