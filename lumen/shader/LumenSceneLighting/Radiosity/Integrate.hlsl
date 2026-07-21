@@ -8,7 +8,6 @@ StructuredBuffer<uint> CardTileData:register(t4);
 Texture2D<float4> RadiosityProbeSHRedAtlas:register(t5);
 Texture2D<float4> RadiosityProbeSHGreenAtlas:register(t6);
 Texture2D<float4> RadiosityProbeSHBlueAtlas:register(t7);
-Buffer<uint4> RectCoordBuffer:register(t8);
 
 RWTexture2D<float3> RWRadiosityAtlas:register(u0);
 RWTexture2D<unorm float> RWRadiosityNumFramesAccumulatedAtlas:register(u1);

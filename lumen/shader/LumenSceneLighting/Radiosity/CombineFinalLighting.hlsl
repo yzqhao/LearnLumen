@@ -7,7 +7,6 @@ Texture2D EmissiveAtlas:register(t3);
 StructuredBuffer<uint> CardTiles:register(t4);
 Texture2D<float4> DirectLightingAtlas:register(t5);
 Texture2D<float4> IndirectLightingAtlas:register(t6);
-Texture2D<float4> RectCoordBuffer:register(t7);
 
 RWTexture2D<float3> RWFinalLightingAtlas:register(u0);
 

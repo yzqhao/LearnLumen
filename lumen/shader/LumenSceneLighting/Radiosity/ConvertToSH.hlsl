@@ -7,7 +7,6 @@ Texture2D LumenCardScene_DepthAtlas:register(t3);
 Texture2D  BlueNoise_Vec2Texture:register(t4);
 StructuredBuffer<uint> CardTileData:register(t5);
 Texture2D<float3> TraceRadianceAtlas:register(t6);
-Buffer<uint4> RectCoordBuffer:register(t7);
 
 RWTexture2D<float4> RWRadiosityProbeSHRedAtlas:register(u0);
 RWTexture2D<float4> RWRadiosityProbeSHGreenAtlas:register(u1);
