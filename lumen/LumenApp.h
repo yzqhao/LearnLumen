@@ -133,8 +133,22 @@ private:
     D3DResource* mNumAdaptiveScreenProbe;
     D3DResource* mLumenScreenProbeGatherCompactedTraceTexelAllocator;
     D3DResource* mLumenScreenProbeGatherCompactedTraceTexelData;
+    D3DResource* mLumenScreenProbeGatherIntegrateIndirectArgs;
     D3DImage* mLumenScreenProbeGatherLightingProbabilityDensityFunction;
     D3DImage* mLumenScreenProbeGatherScreenProbeRadiances[2];
+    D3DImage* mLumenScreenProbeGatherRayInfoForTracing;
+    D3DImage* mLumenScreenProbeGatherScreenProbeMoving;
+    D3DImage* mLumenScreenProbeGatherScreenProbeRadianceSHAmbient;
+    D3DImage* mLumenScreenProbeGatherScreenProbeRadianceSHDirectional;
+    D3DImage* mLumenScreenProbeGatherScreenProbeFilteredRadianceWithBorder;
+    D3DImage* mLumenScreenProbeGatherDiffuseIndirect;
+    D3DImage* mLumenScreenProbeGatherBackfaceDiffuseIndirect;
+    D3DImage* mLumenScreenProbeGatherRoughSpecularIndirect;
+    D3DImage* mLumenScreenProbeGatherHistoryDiffuseIndirects[2];
+    D3DImage* mLumenScreenProbeGatherHistoryBackfaceDiffuseIndirects[2];
+    D3DImage* mLumenScreenProbeGatherHistoryRoughSpecularIndirects[2];
+    D3DImage* mLumenScreenProbeGatherNumHistoryFramesAccumulateds[2];
+    D3DImage* mLumenScreenProbeGatherFastUpdateModes[2];
 
     D3DImage* mStochasticLightingDepthHistorys[2];//no need to clear because always full screen render every frame
 

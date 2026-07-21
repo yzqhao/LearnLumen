@@ -24,6 +24,9 @@
     <Filter Include="Resource Files\ScreenProbeGather">
       <UniqueIdentifier>{b7b703ec-295b-4b84-938b-6445a7cc56bd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resource Files\LumenSceneLighting\Radiosity">
+      <UniqueIdentifier>{b2134d56-2016-41c3-b27b-76d4628be098}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -101,6 +104,21 @@
     </FxCompile>
     <FxCompile Include="lumen\shader\ScreenProbeGather\UniformPlacementScreenProbe.hlsl">
       <Filter>Resource Files\ScreenProbeGather</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\LumenSceneLighting\Radiosity\CombineFinalLighting.hlsl">
+      <Filter>Resource Files\LumenSceneLighting\Radiosity</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\LumenSceneLighting\Radiosity\ConvertToSH.hlsl">
+      <Filter>Resource Files\LumenSceneLighting\Radiosity</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\LumenSceneLighting\Radiosity\Integrate.hlsl">
+      <Filter>Resource Files\LumenSceneLighting\Radiosity</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\LumenSceneLighting\Radiosity\Radiosity.hlsl">
+      <Filter>Resource Files\LumenSceneLighting\Radiosity</Filter>
+    </FxCompile>
+    <FxCompile Include="lumen\shader\LumenSceneLighting\Radiosity\SpatialFilterProbe.hlsl">
+      <Filter>Resource Files\LumenSceneLighting\Radiosity</Filter>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>

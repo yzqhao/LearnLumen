@@ -1565,6 +1565,80 @@ void LumenApp::Draw(const GameTimer& gt)
                 PUSH_BARRIER(mLumenRadiosityTraceRadianceAtlas, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
                 END_BARRIER(mCommandList);
             }
+            {
+                std::vector<D3D12_RESOURCE_BARRIER> barriers;
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherLightingProbabilityDensityFunction->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherRayInfoForTracing->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeMoving->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeRadianceSHAmbient->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeRadianceSHDirectional->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeFilteredRadianceWithBorder->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherDiffuseIndirect->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherBackfaceDiffuseIndirect->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherRoughSpecularIndirect->mUnderlyingResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+                mCommandList->ResourceBarrier(barriers.size(), barriers.data());
+                barriers.clear();
+                mCommandList->DiscardResource(mLumenScreenProbeGatherLightingProbabilityDensityFunction->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherRayInfoForTracing->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherScreenProbeMoving->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherScreenProbeRadianceSHAmbient->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherScreenProbeRadianceSHDirectional->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherScreenProbeFilteredRadianceWithBorder->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherDiffuseIndirect->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherBackfaceDiffuseIndirect->mUnderlyingResource, nullptr);
+                mCommandList->DiscardResource(mLumenScreenProbeGatherRoughSpecularIndirect->mUnderlyingResource, nullptr);
+
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherLightingProbabilityDensityFunction->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherRayInfoForTracing->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeMoving->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeRadianceSHAmbient->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeRadianceSHDirectional->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherScreenProbeFilteredRadianceWithBorder->mUnderlyingResource, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherDiffuseIndirect->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherBackfaceDiffuseIndirect->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ));
+                barriers.push_back(InitResourceBarrier(mLumenScreenProbeGatherRoughSpecularIndirect->mUnderlyingResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ));
+                mCommandList->ResourceBarrier(barriers.size(), barriers.data());
+            }
+            {   // SpatialFilterProbe
+                SCOPED_EVENT(mCommandList, L"SpatialFilterProbe");
+
+                BEGIN_BARRIER();
+                PUSH_BARRIER(mLumenRadiosityFilteredTraceRadianceAtlas, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                END_BARRIER(mCommandList);
+
+                mCommandList->SetPipelineState(mPSOs["SpatialFilterProbe"]);
+                mCommandList->SetComputeRootSignature(mRootSignatures["SpatialFilterProbe"]);
+
+                CD3DX12_GPU_DESCRIPTOR_HANDLE hCbv = CD3DX12_GPU_DESCRIPTOR_HANDLE(mDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), mCbvOffset, mCbvSrvDescriptorSize);
+                mCommandList->SetComputeRootDescriptorTable(0, hCbv);                                                  // b0
+                mCommandList->SetComputeRootDescriptorTable(1, mGPUViews["LumenCardDataSRV"]);                          // t0
+                mCommandList->SetComputeRootDescriptorTable(2, mGPUViews["LumenPageBufferSRV"]);                        // t1
+                mCommandList->SetComputeRootDescriptorTable(3, mGPUViews["LumenSceneNormalSRV"]);                       // t2
+                mCommandList->SetComputeRootDescriptorTable(4, mGPUViews["LumenSceneDepthSRV"]);                        // t3
+                mCommandList->SetComputeRootDescriptorTable(5, mGPUViews["BlueNoise_ScalarTextureSRV"]);                // t4
+                mCommandList->SetComputeRootShaderResourceView(6, DirectLightTilesCB->Resource()->GetGPUVirtualAddress());// t5 
+                mCommandList->SetComputeRootDescriptorTable(7, mGPUViews["LumenRadiosityTraceRadianceAtlasSRV"]);       // t6
+                mCommandList->SetComputeRootDescriptorTable(8, mGPUViews["RectCoordBufferSRV"]);                        // t7
+                mCommandList->SetComputeRootDescriptorTable(9, mGPUViews["LumenRadiosityFilteredTraceRadianceAtlasUAV"]); // u0
+
+                mCommandList->Dispatch(1120, 1, 1);
+
+                BEGIN_BARRIER();
+                PUSH_BARRIER(mLumenRadiosityFilteredTraceRadianceAtlas, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
+                END_BARRIER(mCommandList);
+            }
+            {   // ConvertToSH
+                SCOPED_EVENT(mCommandList, L"ConvertToSH");
+
+            }
+            {   // Integrate
+                SCOPED_EVENT(mCommandList, L"Integrate");
+
+            }
+            {   // CombineFinalLighting
+                SCOPED_EVENT(mCommandList, L"CombineFinalLighting");
+
+            }
         }
     }
     {   // LumenSceneProbeGather
@@ -2461,6 +2535,7 @@ void LumenApp::BuildDescriptorHeaps()
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenCardCaptureEmissiveAtlas->mUnderlyingResource, mLumenCardCaptureEmissiveAtlas->mSRVFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityTraceRadianceAtlas->mSRVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenRadiosityTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityTraceRadianceAtlas->mRTVFormat, 0);
+    CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mLumenRadiosityFilteredTraceRadianceAtlas->mUnderlyingResource, mLumenRadiosityFilteredTraceRadianceAtlas->mRTVFormat, 0);
     //ScreenProbe
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mSRVFormat, 0);
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mScreenProbeSceneDepth->mUnderlyingResource, mScreenProbeSceneDepth->mRTVFormat, 0);
@@ -2631,6 +2706,7 @@ void LumenApp::BuildDescriptorHeaps()
     mGPUViews["LumenCardSceneEmissiveAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenRadiosityTraceRadianceAtlasSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["LumenRadiosityTraceRadianceAtlasUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["LumenRadiosityFilteredTraceRadianceAtlasUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     //ScreenProbe
     mGPUViews["ScreenProbeSceneDepthSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["ScreenProbeSceneDepthUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -3063,7 +3139,7 @@ void LumenApp::BuildRootSignature()
         rp[3].InitAsDescriptorTable(1, &s2);
         rp[4].InitAsDescriptorTable(1, &s3);
         rp[5].InitAsDescriptorTable(1, &s4);
-        rp[6].InitAsDescriptorTable(1, &s5);
+        rp[6].InitAsShaderResourceView(5);
         rp[7].InitAsDescriptorTable(1, &s6);
         rp[8].InitAsDescriptorTable(1, &s7);
         rp[9].InitAsDescriptorTable(1, &u0);
@@ -3875,6 +3951,61 @@ void LumenApp::BuildBuffers()
                 DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
                 { DXGI_FORMAT_R8_UNORM, {0.0f,0.0f,0.0f,1.0f} });
             mLumenScreenProbeGatherScreenProbeTraceMoving->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeTraceMoving");
+            mLumenScreenProbeGatherScreenProbeMoving = Init2DRTImage(md3dDevice, mCommandList, 60, 51, 0,
+                DXGI_FORMAT_R8_UNORM, DXGI_FORMAT_R8_UNORM,
+                DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R8_UNORM, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherScreenProbeMoving->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeMoving");
+
+            mLumenScreenProbeGatherScreenProbeRadianceSHAmbient = Init2DRTImage(md3dDevice, mCommandList, 60, 51, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherScreenProbeRadianceSHAmbient->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeRadianceSHAmbient");
+            mLumenScreenProbeGatherScreenProbeRadianceSHDirectional = Init2DRTImage(md3dDevice, mCommandList, 360, 51, 0,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherScreenProbeRadianceSHDirectional->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeRadianceSHDirectional");
+            mLumenScreenProbeGatherScreenProbeFilteredRadianceWithBorder = Init2DRTImage(md3dDevice, mCommandList, 600, 510, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherScreenProbeFilteredRadianceWithBorder->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.ScreenProbeFilteredRadianceWithBorder");
+            mLumenScreenProbeGatherIntegrateIndirectArgs = InitBufferResource(md3dDevice, _4MB, 0);
+            mLumenScreenProbeGatherIntegrateIndirectArgs->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.IntegrateIndirectArgs");
+
+            mLumenScreenProbeGatherDiffuseIndirect = Init2DRTImage(md3dDevice, mCommandList, 960, 540, 0,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherDiffuseIndirect->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.DiffuseIndirect");
+            mLumenScreenProbeGatherHistoryDiffuseIndirects[0] = Init2DRTImage(md3dDevice, mCommandList, 960, 540, 0,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherHistoryDiffuseIndirects[0]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.DiffuseIndirects[0]");
+            mLumenScreenProbeGatherHistoryDiffuseIndirects[1] = Init2DRTImage(md3dDevice, mCommandList, 960, 540, 0,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R16G16B16A16_FLOAT,
+                DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R16G16B16A16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherHistoryDiffuseIndirects[1]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.DiffuseIndirects[1]");
+
+            mLumenScreenProbeGatherBackfaceDiffuseIndirect = Init2DRTImage(md3dDevice, mCommandList, 960, 540, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherBackfaceDiffuseIndirect->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.BackfaceDiffuseIndirect");
+            mLumenScreenProbeGatherHistoryBackfaceDiffuseIndirects[0] = Init2DRTImage(md3dDevice, mCommandList, 960, 540, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherHistoryBackfaceDiffuseIndirects[0]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.BackfaceDiffuseIndirects[0]");
+            mLumenScreenProbeGatherHistoryBackfaceDiffuseIndirects[1] = Init2DRTImage(md3dDevice, mCommandList, 960, 540, 0,
+                DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+                DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+            mLumenScreenProbeGatherHistoryBackfaceDiffuseIndirects[1]->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.BackfaceDiffuseIndirects[1]");
         }
         {   //StochasticLightingDepthHistorys
             mStochasticLightingDepthHistorys[0] = Init2DRTImage(md3dDevice, mCommandList, mClientWidth, mClientHeight, 0,
@@ -3952,6 +4083,22 @@ void LumenApp::BuildBuffers()
             DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
             { DXGI_FORMAT_R16_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
         mLumenScreenProbeGatherLightingProbabilityDensityFunction->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.LightingProbabilityDensityFunction");
+        mLumenScreenProbeGatherRayInfoForTracing = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+            DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R16_UINT,
+            DXGI_FORMAT_R16_UINT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R16_UINT, {0.0f,0.0f,0.0f,1.0f} });
+        mLumenScreenProbeGatherRayInfoForTracing->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.RayInfosForTracing");
+        mLumenScreenProbeGatherTraceHit = Init2DRTImage(md3dDevice, mCommandList, 480, 408, 0,
+            DXGI_FORMAT_R32_UINT, DXGI_FORMAT_R32_UINT,
+            DXGI_FORMAT_R32_UINT, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R32_UINT, {0.0f,0.0f,0.0f,1.0f} });
+        mLumenScreenProbeGatherTraceHit->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.TraceHit");
+
+        mLumenScreenProbeGatherRoughSpecularIndirect = Init2DRTImage(md3dDevice, mCommandList, 960, 540, 0,
+            DXGI_FORMAT_R11G11B10_FLOAT, DXGI_FORMAT_R11G11B10_FLOAT,
+            DXGI_FORMAT_R11G11B10_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+            { DXGI_FORMAT_R11G11B10_FLOAT, {0.0f,0.0f,0.0f,1.0f} });
+        mLumenScreenProbeGatherRoughSpecularIndirect->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.RoughSpecularIndirect");
 
         mLumenScreenProbeGatherCompactedTraceTexelAllocator = InitBufferResource(md3dDevice, 16, 0);
         mLumenScreenProbeGatherCompactedTraceTexelAllocator->mUnderlyingResource->SetName(L"Lumen.ScreenProbeGather.CompactedTraceTexelAllocator");
